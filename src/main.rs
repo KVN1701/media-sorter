@@ -1,32 +1,73 @@
-use sha2::{Digest, Sha256};
+use xxhash_rust::xxh3::Xxh3;
 use walkdir::WalkDir;
 use std::collections::HashMap;
-use std::fs::File;
-use std::io::Read;
-use hex;
+use std::path::PathBuf;
+use std::fs;
+use std::io::{BufReader, Read};
+use rayon::prelude::*;
+
+const IMAGE_EXTENSIONS: [&str; 5] = ["jpg", "jpeg", "png", "gif", "bmp"];
+const VIDEO_EXTENSIONS: [&str; 5] = ["mp4", "avi", "mkv", "mov", "flv"];
 
 
 fn main() {
-    println!("File hash: {}", get_file_hashes("./")["main.rs"]);
+    let mut source_dir = PathBuf::from("/home/kvn/Pictures/");
+    let mut destination_dir = PathBuf::from("./sorted_images");
+
+    // `push` fügt bei Bedarf einen Pfadtrenner hinzu
+    source_dir.push(""); 
+    destination_dir.push("");
+
+    let source_files = get_file_hashes(&source_dir);
+    let destination_files = get_file_hashes(&destination_dir);
+
+    println!("{}", source_files.len());
+    
+    for (filepath, hash) in &source_files {
+        println!("filepath: {}", filepath);
+    }
 }
 
-fn get_file_hashes(path: &str) -> HashMap<String, String> {
-    let mut file_hashes: HashMap<String, String> = HashMap::new();
+fn is_image_file(filename: &str) -> bool {
+    IMAGE_EXTENSIONS.iter().any(|ext| filename.to_lowercase().ends_with(ext))
+}
 
-    for entry in WalkDir::new(path).into_iter().filter_map(|e| e.ok()) {
-        if entry.file_type().is_file() {
-            let mut file = File::open(entry.path()).unwrap();
-            let mut hasher = Sha256::new();
-            let mut buffer = Vec::new();
-            file.read_to_end(&mut buffer).unwrap();
+fn is_video_file(filename: &str) -> bool {
+    VIDEO_EXTENSIONS.iter().any(|ext| filename.to_lowercase().ends_with(ext))
+}
 
-            hasher.update(&mut buffer);
-            let hash = hex::encode(hasher.finalize());
+fn is_media_file(filename: &str) -> bool {
+    is_image_file(filename) || is_video_file(filename)
+}
 
-            if let Some(filename) = entry.file_name().to_str() {
-                file_hashes.insert(filename.to_string(), hash);
-            } 
-        }
-    }
-    file_hashes
+fn get_new_name(path: &str) -> String {
+
+}
+
+fn get_file_hashes(path: &PathBuf) -> HashMap<String, u64> {
+    WalkDir::new(path)
+        .into_iter()
+        .par_bridge() // change iterator to parallel one
+        .filter_map(|entry| {
+            let entry = entry.ok()?;
+            if entry.file_type().is_file() && is_media_file(entry.path().to_str().unwrap_or_default()) {
+                let file = fs::File::open(entry.path()).ok()?;
+                let mut reader = BufReader::new(file);
+                let mut buffer = [0; 8192];
+                let mut hasher = Xxh3::new();
+                
+                loop {
+                    let count = reader.read(&mut buffer).ok()?;
+                    if count == 0 { break; }
+                    hasher.update(&buffer[..count]);
+                }
+                
+                let hash = hasher.digest();
+                let filepath = entry.path().to_str().unwrap().to_string();
+                Some((filepath, hash))
+            } else {
+                None
+            }
+        })
+        .collect()
 }
