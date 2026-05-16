@@ -1,8 +1,8 @@
 use xxhash_rust::xxh3::Xxh3;
 use walkdir::WalkDir;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
-use std::fs;
+use std::fs::{self, metadata};
 use std::io::{BufReader, Read};
 use rayon::prelude::*;
 
@@ -11,6 +11,8 @@ const VIDEO_EXTENSIONS: [&str; 5] = ["mp4", "avi", "mkv", "mov", "flv"];
 
 
 fn main() {
+    let mut renamed_files: HashSet<String>;
+
     let mut source_dir = PathBuf::from("/home/kvn/Pictures/");
     let mut destination_dir = PathBuf::from("./sorted_images");
 
@@ -18,14 +20,12 @@ fn main() {
     source_dir.push(""); 
     destination_dir.push("");
 
-    let source_files = get_file_hashes(&source_dir);
-    let destination_files = get_file_hashes(&destination_dir);
+    get_new_name("/home/kvn/Pictures/Privat/2019/07-12_Grundausbildung/IMG-20191214-WA0081.jpg", ".");
 
-    println!("{}", source_files.len());
+    //let source_files = get_file_hashes(&source_dir);
+    //let destination_files = get_file_hashes(&destination_dir);
+
     
-    for (filepath, hash) in &source_files {
-        println!("filepath: {}", filepath);
-    }
 }
 
 fn is_image_file(filename: &str) -> bool {
@@ -40,8 +40,14 @@ fn is_media_file(filename: &str) -> bool {
     is_image_file(filename) || is_video_file(filename)
 }
 
-fn get_new_name(path: &str) -> String {
-
+fn get_new_name(filepath: &str, destination_folder: &str) -> String {
+    if let Ok(metadata) = std::fs::metadata(filepath) {
+        if let Ok(modification_date) = metadata.modified() {
+            println!("{:?}", modification_date); // TODO: Change to another crate function
+            return filepath.to_string();
+        }
+    }
+    filepath.to_string()
 }
 
 fn get_file_hashes(path: &PathBuf) -> HashMap<String, u64> {
