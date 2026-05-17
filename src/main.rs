@@ -50,7 +50,7 @@ fn get_new_name(filepath: &str, destination_folder: &str) -> String {
     filepath.to_string()
 }
 
-fn get_file_hashes(path: &PathBuf) -> HashMap<String, u64> {
+fn get_file_hashes(path: &PathBuf) -> HashMap<u64, String> {
     WalkDir::new(path)
         .into_iter()
         .par_bridge() // change iterator to parallel one
@@ -70,7 +70,7 @@ fn get_file_hashes(path: &PathBuf) -> HashMap<String, u64> {
                 
                 let hash = hasher.digest();
                 let filepath = entry.path().to_str().unwrap().to_string();
-                Some((filepath, hash))
+                Some((hash, filepath))
             } else {
                 None
             }
