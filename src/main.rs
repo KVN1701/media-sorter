@@ -1,10 +1,15 @@
 use xxhash_rust::xxh3::Xxh3;
 use walkdir::WalkDir;
 use std::collections::{HashMap, HashSet};
+use std::f32::consts::E;
+use std::os::linux::raw::stat;
 use std::path::PathBuf;
-use std::fs::{self, metadata};
+use std::fs;
 use std::io::{BufReader, Read};
 use rayon::prelude::*;
+use rexif::ExifTag;
+use colored::Colorize;
+use chrono::{Datelike, NaiveDateTime, Timelike};
 
 const IMAGE_EXTENSIONS: [&str; 5] = ["jpg", "jpeg", "png", "gif", "bmp"];
 const VIDEO_EXTENSIONS: [&str; 5] = ["mp4", "avi", "mkv", "mov", "flv"];
@@ -20,12 +25,16 @@ fn main() {
     source_dir.push(""); 
     destination_dir.push("");
 
-    get_new_name("/home/kvn/Pictures/Privat/2019/07-12_Grundausbildung/IMG-20191214-WA0081.jpg", ".");
+    get_new_name("/home/kvn/Pictures/Privat/2019/07-12_Grundausbildung/IMG-20191214-WA0081.jpg", &destination_dir, true);
 
     //let source_files = get_file_hashes(&source_dir);
     //let destination_files = get_file_hashes(&destination_dir);
 
     
+}
+
+fn get_file_extension(filename: &str) -> String {
+    filename.split(".").last().unwrap().to_string()
 }
 
 fn is_image_file(filename: &str) -> bool {
@@ -40,12 +49,37 @@ fn is_media_file(filename: &str) -> bool {
     is_image_file(filename) || is_video_file(filename)
 }
 
-fn get_new_name(filepath: &str, destination_folder: &str) -> String {
-    if let Ok(metadata) = std::fs::metadata(filepath) {
-        if let Ok(modification_date) = metadata.modified() {
-            println!("{:?}", modification_date); // TODO: Change to another crate function
-            return filepath.to_string();
+fn get_new_name(filepath: &str, destination_folder: &PathBuf, create_subfolders: bool) -> String {
+    let filename = filepath.split("/").last().unwrap().to_string();
+
+    match rexif::parse_file(filepath) {
+        Ok(exif_data) => {
+            if let Some(entry) = exif_data.entries.iter().find(|e| e.tag == ExifTag::DateTimeOriginal){
+                let date_taken = entry.value_more_readable.trim();
+
+                match NaiveDateTime::parse_from_str(date_taken, "%Y:%m:%d %H:%M:%S") {
+                    Ok(dt) => {
+                        let mut dest_path = destination_folder.clone();
+                        
+
+                        if create_subfolders {
+                            dest_path.push(dt.year().to_string());
+                        }
+                        let new_filename = format!("{}-{}{:02}{:02}-{:02}{:02}{:02}.{}",
+                            if is_video_file(&filename) { "VID" } else {"IMG"} ,dt.year(), dt.month(),
+                            dt.day(), 
+                            dt.hour(),
+                            dt.minute(),
+                            dt.second(),
+                            get_file_extension(&filename)
+                        );
+                    }
+                    Err(e) => eprintln!("[!] An error has occured with file '{}':\n\t{}\n[i] Skipping file", filename, e.to_string().red())
+                }
+                return filepath.to_string();
+            }
         }
+        Err(e) => eprintln!("[!] An error has occured with file '{}':\n\t{}\n[i] Skipping file", filename, e.to_string().red())
     }
     filepath.to_string()
 }
