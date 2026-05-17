@@ -25,7 +25,7 @@ fn main() {
     source_dir.push(""); 
     destination_dir.push("");
 
-    get_new_name("/home/kvn/Pictures/Privat/2019/07-12_Grundausbildung/IMG-20191214-WA0081.jpg", &destination_dir, true);
+    rename_file("/home/kvn/Pictures/Privat/2019/07-12_Grundausbildung/IMG-20191214-WA0081.jpg", &destination_dir, true);
 
     //let source_files = get_file_hashes(&source_dir);
     //let destination_files = get_file_hashes(&destination_dir);
@@ -49,7 +49,7 @@ fn is_media_file(filename: &str) -> bool {
     is_image_file(filename) || is_video_file(filename)
 }
 
-fn get_new_name(filepath: &str, destination_folder: &PathBuf, create_subfolders: bool) -> String {
+fn rename_file(filepath: &str, destination_folder: &PathBuf, create_subfolders: bool) -> Result<(), std::io::Error> {
     let filename = filepath.split("/").last().unwrap().to_string();
 
     match rexif::parse_file(filepath) {
@@ -60,29 +60,35 @@ fn get_new_name(filepath: &str, destination_folder: &PathBuf, create_subfolders:
                 match NaiveDateTime::parse_from_str(date_taken, "%Y:%m:%d %H:%M:%S") {
                     Ok(dt) => {
                         let mut dest_path = destination_folder.clone();
-                        
-
-                        if create_subfolders {
-                            dest_path.push(dt.year().to_string());
-                        }
                         let new_filename = format!("{}-{}{:02}{:02}-{:02}{:02}{:02}.{}",
-                            if is_video_file(&filename) { "VID" } else {"IMG"} ,dt.year(), dt.month(),
+                            if is_video_file(&filename) { "VID" } else {"IMG"},
+                            dt.year(), 
+                            dt.month(),
                             dt.day(), 
                             dt.hour(),
                             dt.minute(),
                             dt.second(),
                             get_file_extension(&filename)
                         );
+
+                        if create_subfolders {
+                            dest_path.push(dt.year().to_string());
+                        }
+                        fs::create_dir_all(&dest_path)?;
+                        dest_path.push(new_filename);
+                        fs::rename(filepath, &dest_path)?;
+                        return Ok(());
                     }
-                    Err(e) => eprintln!("[!] An error has occured with file '{}':\n\t{}\n[i] Skipping file", filename, e.to_string().red())
+                    Err(e) => eprintln!("[!] An error has occured with file '{}':\n\t{}\n[i] Skipping file {}", filename, e.to_string().red(), filepath)
                 }
-                return filepath.to_string();
             }
         }
-        Err(e) => eprintln!("[!] An error has occured with file '{}':\n\t{}\n[i] Skipping file", filename, e.to_string().red())
+        Err(e) => eprintln!("[!] An error has occured with file '{}':\n\t{}\n[i] Skipping file {}", filename, e.to_string().red(), filepath)
     }
-    filepath.to_string()
+    fs::rename(filepath, destination_folder)?;
+    Ok(())
 }
+
 
 fn get_file_hashes(path: &PathBuf) -> HashMap<u64, String> {
     WalkDir::new(path)
