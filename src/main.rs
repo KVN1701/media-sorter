@@ -76,7 +76,7 @@ fn rename_file(filepath: &str, destination_folder: &PathBuf, create_subfolders: 
                         }
                         fs::create_dir_all(&dest_path)?;
                         dest_path.push(new_filename);
-                        fs::rename(filepath, &dest_path)?;
+                        fs::rename(filepath, &dest_path)?; // TODO: add logic to resolve overwriting issues
                         return Ok(());
                     }
                     Err(e) => eprintln!("[!] An error has occured with file '{}':\n\t{}\n[i] Skipping file {}", filename, e.to_string().red(), filepath)
