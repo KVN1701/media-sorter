@@ -1,8 +1,6 @@
 use xxhash_rust::xxh3::Xxh3;
 use walkdir::WalkDir;
 use std::collections::{HashMap, HashSet};
-use std::f32::consts::E;
-use std::os::linux::raw::stat;
 use std::path::PathBuf;
 use std::fs;
 use std::io::{BufReader, Read};
@@ -10,9 +8,11 @@ use rayon::prelude::*;
 use rexif::ExifTag;
 use colored::Colorize;
 use chrono::{Datelike, NaiveDateTime, Timelike};
+use indicatif::{ProgressBar, ParallelProgressIterator, ProgressStyle};
 
 const IMAGE_EXTENSIONS: [&str; 5] = ["jpg", "jpeg", "png", "gif", "bmp"];
 const VIDEO_EXTENSIONS: [&str; 5] = ["mp4", "avi", "mkv", "mov", "flv"];
+
 
 
 fn main() {
@@ -25,9 +25,9 @@ fn main() {
     source_dir.push(""); 
     destination_dir.push("");
 
-    rename_file("/home/kvn/Pictures/Privat/2019/07-12_Grundausbildung/IMG-20191214-WA0081.jpg", &destination_dir, true);
+    //rename_file("/home/kvn/Pictures/Privat/2019/07-12_Grundausbildung/IMG-20191214-WA0081.jpg", &destination_dir, true);
 
-    //let source_files = get_file_hashes(&source_dir);
+    let source_files = get_file_hashes(&source_dir);
     //let destination_files = get_file_hashes(&destination_dir);
 
     
@@ -91,11 +91,27 @@ fn rename_file(filepath: &str, destination_folder: &PathBuf, create_subfolders: 
 
 
 fn get_file_hashes(path: &PathBuf) -> HashMap<u64, String> {
-    WalkDir::new(path)
+    let files: Vec<_> = WalkDir::new(path)
         .into_iter()
-        .par_bridge() // change iterator to parallel one
+        .filter_map(|e| e.ok())
+        .filter(|e| e.file_type().is_file())
+        .collect();
+
+    let pb = ProgressBar::new(files.len() as u64);
+
+    // customizing the progress bar
+    pb.set_style(
+        ProgressStyle::with_template(
+            "[+] Gathering file hashes: [{bar:65}] {pos}/{len} - ETA: {eta}"
+        )
+        .unwrap()
+        .progress_chars("=> "),
+    );
+
+    let result : HashMap<u64, String> = files
+        .par_iter()
+        .progress_with(pb)
         .filter_map(|entry| {
-            let entry = entry.ok()?;
             if entry.file_type().is_file() && is_media_file(entry.path().to_str().unwrap_or_default()) {
                 let file = fs::File::open(entry.path()).ok()?;
                 let mut reader = BufReader::new(file);
@@ -114,6 +130,7 @@ fn get_file_hashes(path: &PathBuf) -> HashMap<u64, String> {
             } else {
                 None
             }
-        })
-        .collect()
+        }).collect();
+
+    result
 }
