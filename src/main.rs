@@ -1,6 +1,7 @@
 use xxhash_rust::xxh3::Xxh3;
 use walkdir::WalkDir;
 use std::collections::{HashMap, HashSet};
+use std::fmt::format;
 use std::path::PathBuf;
 use std::fs::{self, DirEntry};
 use std::io::{BufReader, Read};
@@ -49,7 +50,7 @@ fn is_media_file(filename: &str) -> bool {
     is_image_file(filename) || is_video_file(filename)
 }
 
-fn rename_file(filepath: &str, destination_folder: &PathBuf, create_subfolders: bool) -> Result<(), std::io::Error> {
+fn rename_file(filepath: &str, destination_folder: &PathBuf, renamed_files: &mut HashSet<String>, create_subfolders: bool) -> Result<(), std::io::Error> {
     let filename = filepath.split("/").last().unwrap().to_string();
 
     match rexif::parse_file(filepath) {
@@ -60,7 +61,7 @@ fn rename_file(filepath: &str, destination_folder: &PathBuf, create_subfolders: 
                 match NaiveDateTime::parse_from_str(date_taken, "%Y:%m:%d %H:%M:%S") {
                     Ok(dt) => {
                         let mut dest_path = destination_folder.clone();
-                        let new_filename = format!("{}-{}{:02}{:02}-{:02}{:02}{:02}.{}",
+                        let base_filename = format!("{}-{}{:02}{:02}-{:02}{:02}{:02}.{}",
                             if is_video_file(&filename) { "VID" } else {"IMG"},
                             dt.year(), 
                             dt.month(),
@@ -75,8 +76,21 @@ fn rename_file(filepath: &str, destination_folder: &PathBuf, create_subfolders: 
                             dest_path.push(dt.year().to_string());
                         }
                         fs::create_dir_all(&dest_path)?;
+
+                        // Check if a file has the same name
+                        let mut new_filename = base_filename.clone();
+                        let mut counter: u8 = 0;
+
+                        // append a number to the name
+                        while renamed_files.contains(&new_filename) {
+                            counter += counter;
+                            let end = new_filename.char_indices().nth_back(get_file_extension(&new_filename).len()).map(|(i, _)| i).unwrap_or_default();
+                            let prefix = new_filename[..end].to_string();
+                            new_filename = format!("{}_{}.{}", prefix, format!("{:04}", counter), get_file_extension(&filename));
+                        }
+                        renamed_files.insert(new_filename.clone());
                         dest_path.push(new_filename);
-                        fs::rename(filepath, &dest_path)?; // TODO: add logic to resolve overwriting issues
+                        fs::rename(filepath, &dest_path)?;
                         return Ok(());
                     }
                     Err(e) => eprintln!("[!] An error has occured with file '{}':\n\t{}\n[i] Skipping file {}", filename, e.to_string().red(), filepath)
@@ -132,6 +146,7 @@ fn get_file_hashes(path: &PathBuf) -> HashMap<u64, String> {
             }
         }).collect();
 
+    println!("[+] File hashes gathered successfully!");
     result
 }
 
@@ -149,6 +164,6 @@ fn get_files(path: &PathBuf) -> HashSet<String> {
         }
     }).collect();
 
-    println!("[+] Files gathered successfully");
+    println!("[+] Files gathered successfully!");
     files
 }
