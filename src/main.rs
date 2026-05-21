@@ -22,11 +22,11 @@ struct Cli {
     /// Define the source folder
     source:PathBuf,
     
-    #[arg(short,long)]
+    #[arg(short, long, conflicts_with = "list")]
     /// Define the destination folder
-    destination:PathBuf,
+    destination: Option<PathBuf>,
     
-    #[arg(short,long)]
+    #[arg(short, long, conflicts_with = "destination")]
     /// List the files in the source folder. Does not move or rename files.
     list:bool,
 
@@ -39,18 +39,34 @@ struct Cli {
 fn main() {
     let mut renamed_files: HashSet<String>;
 
-    let mut source_dir = PathBuf::from("/home/kvn/Media/");
-    let mut destination_dir = PathBuf::from("./sorted_images");
-
-    // `push` fügt bei Bedarf einen Pfadtrenner hinzu
-    source_dir.push(""); 
-    destination_dir.push("");
-
+    // Parser
     let cli = Cli::parse();
+    let mut source_dir = cli.source.clone();
+    let mut destination_dir = cli.destination.clone().unwrap_or(source_dir.clone());
+
+    // get the absolute paths
+    let abs_source = match source_dir.canonicalize() {
+        Ok(p) => p,
+        Err(_) => std::env::current_dir().unwrap().join(&source_dir),
+    };
+    
+    let abs_dest = match destination_dir.canonicalize() {
+        Ok(p) => p,
+        Err(_) => std::env::current_dir().unwrap().join(&source_dir),
+    };
+
+    // list option
+    if cli.list {
+        let files = get_files(&source_dir, &cli.skip_dir);
+        println!("[i] Found {} files in {}", files.len(), abs_source.display());
+        get_files(&source_dir, &cli.skip_dir).iter().for_each(|file| println!("[+] File found: {}", file));
+        return;
+    }
+
 
     //rename_file("/home/kvn/Pictures/Privat/2019/07-12_Grundausbildung/IMG-20191214-WA0081.jpg", &destination_dir, true);
 
-    let source_files = get_files(&source_dir);//get_file_hashes(&source_dir);
+    //let source_files = get_files(&source_dir);//get_file_hashes(&source_dir);
     //let destination_files = get_file_hashes(&destination_dir);
 
     
