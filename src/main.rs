@@ -1,8 +1,7 @@
 use xxhash_rust::xxh3::Xxh3;
 use walkdir::WalkDir;
 use std::collections::{HashMap, HashSet};
-use std::fmt::format;
-use std::path::PathBuf;
+use std::path::{Path,PathBuf};
 use std::fs::{self, DirEntry};
 use std::io::{BufReader, Read};
 use rayon::prelude::*;
@@ -10,10 +9,31 @@ use rexif::ExifTag;
 use colored::Colorize;
 use chrono::{Datelike, NaiveDateTime, Timelike};
 use indicatif::{ProgressBar, ParallelProgressIterator, ProgressStyle};
+use clap::Parser;
 
 const IMAGE_EXTENSIONS: [&str; 5] = ["jpg", "jpeg", "png", "gif", "bmp"];
 const VIDEO_EXTENSIONS: [&str; 5] = ["mp4", "avi", "mkv", "mov", "flv"];
 
+#[derive(Parser)]
+#[command(name = "image_sorter")]
+#[command(version = "1.0")]
+#[command(version, about, long_about = None)]
+struct Cli {
+    /// Define the source folder
+    source:PathBuf,
+    
+    #[arg(short,long)]
+    /// Define the destination folder
+    destination:PathBuf,
+    
+    #[arg(short,long)]
+    /// List the files in the source folder. Does not move or rename files.
+    list:bool,
+
+    #[arg(long, num_args = 0.., value_delimiter = ',')]
+    /// Skips the directory, allows multiple entries separated by ','
+    skip_dir:Vec<String>,
+}
 
 
 fn main() {
@@ -25,6 +45,8 @@ fn main() {
     // `push` fügt bei Bedarf einen Pfadtrenner hinzu
     source_dir.push(""); 
     destination_dir.push("");
+
+    let cli = Cli::parse();
 
     //rename_file("/home/kvn/Pictures/Privat/2019/07-12_Grundausbildung/IMG-20191214-WA0081.jpg", &destination_dir, true);
 
@@ -103,11 +125,20 @@ fn rename_file(filepath: &str, destination_folder: &PathBuf, renamed_files: &mut
     Ok(())
 }
 
+fn path_contains_any_skip(path: &Path, skips: &[String]) -> bool {
+    if skips.is_empty() { return false; }
+    path.components().any(|c| {
+        let s = c.as_os_str().to_string_lossy();
+        skips.iter().any(|skip| skip == &s)
+    })
+}
 
-fn get_file_hashes(path: &PathBuf) -> HashMap<u64, String> {
+
+fn get_file_hashes(path: &PathBuf, skipdirs: &[String]) -> HashMap<u64, String> {
     let files: Vec<_> = WalkDir::new(path)
         .into_iter()
         .filter_map(|e| e.ok())
+        .filter(|e| !path_contains_any_skip(e.path(), skipdirs))
         .filter(|e| e.file_type().is_file())
         .collect();
 
@@ -151,18 +182,23 @@ fn get_file_hashes(path: &PathBuf) -> HashMap<u64, String> {
 }
 
 
-fn get_files(path: &PathBuf) -> HashSet<String> {
+fn get_files(path: &PathBuf, skipdirs: &[String]) -> HashSet<String> {
     println!("[+] Gathering filenames ...");
 
-    let files: HashSet<String> = WalkDir::new(path).into_iter().filter_map(|e| e.ok()).filter_map(|entry| {
-        let filepath = entry.path().to_str().unwrap_or_default();
-        if entry.file_type().is_file() && is_media_file(entry.path().to_str().unwrap_or_default()) {
-            Some(String::from(filepath))
+    let files: HashSet<String> = WalkDir::new(path)
+        .into_iter()
+        .filter_map(|e| e.ok())
+        .filter(|e| !path_contains_any_skip(e.path(), skipdirs))
+        .filter_map(|entry| {
+            let filepath = entry.path().to_str().unwrap_or_default();
+            if entry.file_type().is_file() && is_media_file(entry.path().to_str().unwrap_or_default()) {
+                Some(String::from(filepath))
+            }
+            else {
+                None
+            }
         }
-        else {
-            None
-        }
-    }).collect();
+    ).collect();
 
     println!("[+] Files gathered successfully!");
     files
