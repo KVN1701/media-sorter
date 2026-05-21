@@ -2,7 +2,7 @@ use xxhash_rust::xxh3::Xxh3;
 use walkdir::WalkDir;
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
-use std::fs;
+use std::fs::{self, DirEntry};
 use std::io::{BufReader, Read};
 use rayon::prelude::*;
 use rexif::ExifTag;
@@ -18,7 +18,7 @@ const VIDEO_EXTENSIONS: [&str; 5] = ["mp4", "avi", "mkv", "mov", "flv"];
 fn main() {
     let mut renamed_files: HashSet<String>;
 
-    let mut source_dir = PathBuf::from("/home/kvn/Pictures/");
+    let mut source_dir = PathBuf::from("/home/kvn/Media/");
     let mut destination_dir = PathBuf::from("./sorted_images");
 
     // `push` fügt bei Bedarf einen Pfadtrenner hinzu
@@ -27,7 +27,7 @@ fn main() {
 
     //rename_file("/home/kvn/Pictures/Privat/2019/07-12_Grundausbildung/IMG-20191214-WA0081.jpg", &destination_dir, true);
 
-    let source_files = get_file_hashes(&source_dir);
+    let source_files = get_files(&source_dir);//get_file_hashes(&source_dir);
     //let destination_files = get_file_hashes(&destination_dir);
 
     
@@ -133,4 +133,22 @@ fn get_file_hashes(path: &PathBuf) -> HashMap<u64, String> {
         }).collect();
 
     result
+}
+
+
+fn get_files(path: &PathBuf) -> HashSet<String> {
+    println!("[+] Gathering filenames ...");
+
+    let files: HashSet<String> = WalkDir::new(path).into_iter().filter_map(|e| e.ok()).filter_map(|entry| {
+        let filepath = entry.path().to_str().unwrap_or_default();
+        if entry.file_type().is_file() && is_media_file(entry.path().to_str().unwrap_or_default()) {
+            Some(String::from(filepath))
+        }
+        else {
+            None
+        }
+    }).collect();
+
+    println!("[+] Files gathered successfully");
+    files
 }
