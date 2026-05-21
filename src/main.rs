@@ -1,6 +1,7 @@
 use xxhash_rust::xxh3::Xxh3;
 use walkdir::WalkDir;
 use std::collections::{HashMap, HashSet};
+use std::hash::Hash;
 use std::path::{Path,PathBuf};
 use std::fs::{self, DirEntry};
 use std::io::{BufReader, Read};
@@ -23,26 +24,34 @@ struct Cli {
     source:PathBuf,
     
     #[arg(short, long, conflicts_with = "list")]
-    /// Define the destination folder
+    /// Define the destination folder. Defaults to the value of source
     destination: Option<PathBuf>,
     
     #[arg(short, long, conflicts_with = "destination")]
     /// List the files in the source folder. Does not move or rename files.
     list:bool,
 
+    #[arg(short, long, conflicts_with = "list")]
+    /// Greately improves speed, but does not check for duplicates. Does not override!
+    quick:bool,
+
     #[arg(long, num_args = 0.., value_delimiter = ',')]
-    /// Skips the directory, allows multiple entries separated by ','
-    skip_dir:Vec<String>,
+    /// Skips the directories, allows multiple entries separated by ','
+    skip_dirs:Vec<String>,
+
+    #[arg(long, conflicts_with = "list")]
+    /// Does not automatically create subdirectories for every year (2000, 2001, ...)
+    dont_create_subdirs:bool,
 }
 
 
 fn main() {
-    let mut renamed_files: HashSet<String>;
+    let mut renamed_files: HashSet<String> = HashSet::new();
 
     // Parser
     let cli = Cli::parse();
-    let mut source_dir = cli.source.clone();
-    let mut destination_dir = cli.destination.clone().unwrap_or(source_dir.clone());
+    let source_dir = cli.source.clone();
+    let destination_dir = cli.destination.clone().unwrap_or(source_dir.clone());
 
     // get the absolute paths
     let abs_source = match source_dir.canonicalize() {
@@ -57,19 +66,26 @@ fn main() {
 
     // list option
     if cli.list {
-        let files = get_files(&source_dir, &cli.skip_dir);
+        let files = get_files(&source_dir, &cli.skip_dirs);
         println!("[i] Found {} files in {}", files.len(), abs_source.display());
-        get_files(&source_dir, &cli.skip_dir).iter().for_each(|file| println!("[+] File found: {}", file));
+        get_files(&source_dir, &cli.skip_dirs).iter().for_each(|file| println!("[+] File found: {}", file));
         return;
     }
 
-
-    //rename_file("/home/kvn/Pictures/Privat/2019/07-12_Grundausbildung/IMG-20191214-WA0081.jpg", &destination_dir, true);
-
-    //let source_files = get_files(&source_dir);//get_file_hashes(&source_dir);
-    //let destination_files = get_file_hashes(&destination_dir);
-
-    
+    // quick-mode
+    if cli.quick {
+        let source_files = get_files(&source_dir, &cli.skip_dirs);
+        for file in source_files {
+            println!("[i] Renaming{}{}", if abs_source == abs_dest { " " } else { " and moving " }, file);
+            let new_file = rename_file(&file, &abs_dest, &mut renamed_files, !cli.dont_create_subdirs).unwrap();
+            if new_file != PathBuf::new() {
+                println!("[+] {} file to {}", if abs_source == abs_dest { "Renamed" } else { "Moved" } , new_file.display())
+            }
+        }
+        println!("[+] Finished {} {} files in {}", if abs_source == abs_dest { "Renaming" } else { "Moving" }, source_files.len(), abs_source.display());
+        return;
+    }
+        
 }
 
 fn get_file_extension(filename: &str) -> String {
@@ -88,7 +104,7 @@ fn is_media_file(filename: &str) -> bool {
     is_image_file(filename) || is_video_file(filename)
 }
 
-fn rename_file(filepath: &str, destination_folder: &PathBuf, renamed_files: &mut HashSet<String>, create_subfolders: bool) -> Result<(), std::io::Error> {
+fn rename_file(filepath: &str, destination_folder: &PathBuf, renamed_files: &mut HashSet<String>, create_subfolders: bool) -> Result<PathBuf, std::io::Error> {
     let filename = filepath.split("/").last().unwrap().to_string();
 
     match rexif::parse_file(filepath) {
@@ -129,16 +145,25 @@ fn rename_file(filepath: &str, destination_folder: &PathBuf, renamed_files: &mut
                         renamed_files.insert(new_filename.clone());
                         dest_path.push(new_filename);
                         fs::rename(filepath, &dest_path)?;
-                        return Ok(());
+                        return Ok(dest_path);
                     }
-                    Err(e) => eprintln!("[!] An error has occured with file '{}':\n\t{}\n[i] Skipping file {}", filename, e.to_string().red(), filepath)
+                    Err(e) => {
+                        eprintln!("[!] An error has occured with file '{}':\n\t{}\n[i] Skipping file {}", filename, e.to_string().red(), filepath);
+                        return Ok(PathBuf::new());
+                    }
                 }
             }
         }
-        Err(e) => eprintln!("[!] An error has occured with file '{}':\n\t{}\n[i] Skipping file {}", filename, e.to_string().red(), filepath)
+        Err(e) => {
+            eprintln!("[!] An error has occured with file '{}':\n\t{}\n[i] Skipping file {}", filename, e.to_string().red(), filepath);
+            return Ok(PathBuf::new());
+        }
     }
-    fs::rename(filepath, destination_folder)?;
-    Ok(())
+    
+    let mut new_filename = destination_folder.clone();
+    new_filename.push(filename);
+    fs::rename(filepath, &new_filename)?;
+    Ok(new_filename)
 }
 
 fn path_contains_any_skip(path: &Path, skips: &[String]) -> bool {
