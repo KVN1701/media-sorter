@@ -75,7 +75,7 @@ fn main() {
     // quick-mode
     if cli.quick {
         let source_files = get_files(&source_dir, &cli.skip_dirs);
-        for file in source_files {
+        for file in &source_files {
             println!("[i] Renaming{}{}", if abs_source == abs_dest { " " } else { " and moving " }, file);
             let new_file = rename_file(&file, &abs_dest, &mut renamed_files, !cli.dont_create_subdirs).unwrap();
             if new_file != PathBuf::new() {
