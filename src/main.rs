@@ -7,14 +7,14 @@ use std::io::{BufReader, Read};
 use rayon::prelude::*;
 use std::process::Command;
 use chrono::{Datelike, NaiveDateTime, Timelike, DateTime};
-use indicatif::{ProgressBar, ParallelProgressIterator, ProgressStyle};
+use indicatif::{ParallelProgressIterator, ProgressBar, ProgressStyle};
 use clap::Parser;
 
 const IMAGE_EXTENSIONS: [&str; 5] = ["jpg", "jpeg", "png", "gif", "bmp"];
 const VIDEO_EXTENSIONS: [&str; 5] = ["mp4", "avi", "mkv", "mov", "flv"];
 
 #[derive(Parser)]
-#[command(name = "image_sorter")]
+#[command(name = "media_sorter")]
 #[command(version = "1.0")]
 #[command(version, about, long_about = None)]
 struct Cli {
@@ -24,12 +24,14 @@ struct Cli {
     #[arg(short, long, conflicts_with = "list")]
     /// Define the destination folder. Defaults to the value of source
     destination: Option<PathBuf>,
-
-    ///
     
     #[arg(short, long, conflicts_with = "destination")]
     /// List the files in the source folder. Does not move or rename files.
     list:bool,
+
+    #[arg(short, long, requires = "list")]
+    /// output a list of files to a file
+    output:Option<String>,
 
     #[arg(short, long, conflicts_with = "destination", conflicts_with = "list", conflicts_with = "quick")]
     /// Renames the files in the current directory without moving them.
@@ -69,55 +71,83 @@ fn main() {
     };
 
     // list option
-    if cli.list {
+    if cli.list { // TODO: add output option
         let files = get_files(&abs_source, &cli.skip_dirs);
         println!("[i] Found {} files in {}", files.len(), abs_source.display());
-        get_files(&abs_source, &cli.skip_dirs).iter().for_each(|file| println!("[+] File found: {}", file));
+        files.iter().for_each(|file| println!("[+] File found: {}", file));
         return;
     }
 
     // quick-mode
     if cli.quick {
         let source_files = get_files(&abs_source, &cli.skip_dirs);
-        for file in &source_files {
-            println!("[i] Renaming{}{}", if abs_source == abs_dest { " " } else { " and moving " }, file);
-            let new_file = rename_file(&file, &abs_dest, &mut renamed_files, !cli.dont_create_subdirs).unwrap();
-            if new_file != PathBuf::new() {
-                println!("[+] {} file to {}", if abs_source == abs_dest { "Renamed" } else { "Moved" } , new_file.display())
-            }
+        let pb = ProgressBar::new(source_files.len() as u64);
+
+        // customizing the progress bar
+        pb.set_style(
+            ProgressStyle::with_template(
+                "[i] Processing files: [{bar:65}] {pos}/{len} - ETA: {eta}"
+            )
+            .unwrap()
+            .progress_chars("=> "),
+        );
+        for file in source_files {
+            rename_file(&file, &abs_dest, &mut renamed_files, !cli.dont_create_subdirs).unwrap();
+            pb.inc(1);
         }
-        println!("[+] Finished {} {} files in {}", if abs_source == abs_dest { "Renaming" } else { "Moving" }, source_files.len(), abs_source.display());
+        pb.finish();
         return;
     }
 
     // rename-mode
     if cli.rename {
         let source_files = get_files(&abs_source, &cli.skip_dirs);
+        let pb = ProgressBar::new(source_files.len() as u64);
+
+        // customizing the progress bar
+        pb.set_style(
+            ProgressStyle::with_template(
+                "[i] Processing files: [{bar}] {pos}/{len} - ETA: {eta}"
+            )
+            .unwrap()
+            .progress_chars("=> "),
+        );
+
         for file in &source_files {
-            println!("[i] Renaming file '{}'", file);
             rename_file(file, &abs_source, &mut renamed_files, false).unwrap();
+            pb.inc(1);
         }
+        pb.finish();
         return;
     }
 
     // base case
-    println!("[i] Gathering file hashes in source folder {}", abs_source.display());
-    let source_files = get_file_hashes(&abs_source, &cli.skip_dirs);
-    println!("[i] Found {} files in {}", source_files.len(), abs_source.display());
+    println!("[i] Gathering file hashes in source folder {:?}", abs_source);
+    let source_files = get_file_hashes(&abs_source, &cli.skip_dirs, HashSet::new());
 
-    println!("[i] Gathering file hashes in destination folder {}", abs_dest.display());
-    let dest_files = get_file_hashes(&abs_dest, &cli.skip_dirs);
-    println!("[i] Found {} files in {}", dest_files.len(), abs_source.display());
+    println!("[i] Gathering file hashes in destination folder {:?}", abs_dest);
+    let dest_files = get_file_hashes(&abs_dest, &cli.skip_dirs, source_files.values().cloned().collect());
+
+    // setting ub the pregress bar
+    let pb = ProgressBar::new(source_files.len() as u64);
+
+    // customizing the progress bar
+    pb.set_style(
+        ProgressStyle::with_template(
+            "[i] Moving files: [{bar}] {pos}/{len} - ETA: {eta}"
+        )
+        .unwrap()
+        .progress_chars("=> "),
+    );
 
     for (hash, filepath) in &source_files {
-        println!("[i] Moving and renaming file {}", filepath);
         if !dest_files.contains_key(hash) || ( dest_files.contains_key(hash) && filepath == &dest_files[hash] ){
             rename_file(filepath, &abs_dest, &mut renamed_files, !cli.dont_create_subdirs).unwrap();
-            continue;
         }
-        println!("[i] Duplicate detected skipping file {}", filepath);
+        pb.inc(1);
     }
-        
+    pb.finish();
+    return;        
 }
 
 fn get_file_extension(filename: &str) -> String {
@@ -206,16 +236,15 @@ fn rename_file(filepath: &str, destination_folder: &PathBuf, renamed_files: &mut
         renamed_files.insert(new_filename.clone());
         dest_path.push(new_filename);
         fs::rename(filepath, &dest_path)?;
-        println!("[+] Successfully renamed to {}", dest_path.display());
         return Ok(dest_path);
     }
 
     // Fallback: move without renaming
-    eprintln!("[-] No EXIF date found, moving as-is: {}", filepath);
+    eprintln!("[!] No EXIF date found: {}", filepath);
     let mut fallback = destination_folder.clone();
     fallback.push(&filename);
     fs::rename(filepath, &fallback)?;
-    println!("[-] Moved to {}", fallback.display());
+    println!("[i] Moved to {}", fallback.display());
     Ok(fallback)
 }
 
@@ -228,7 +257,7 @@ fn path_contains_any_skip(path: &Path, skips: &[String]) -> bool {
 }
 
 
-fn get_file_hashes(path: &PathBuf, skipdirs: &[String]) -> HashMap<u64, String> {
+fn get_file_hashes(path: &PathBuf, skipdirs: &[String], ignore: HashSet<String>) -> HashMap<u64, String> {
     let files: Vec<_> = WalkDir::new(path)
         .into_iter()
         .filter_map(|e| e.ok())
@@ -241,7 +270,7 @@ fn get_file_hashes(path: &PathBuf, skipdirs: &[String]) -> HashMap<u64, String> 
     // customizing the progress bar
     pb.set_style(
         ProgressStyle::with_template(
-            "[+] Gathering file hashes: [{bar:65}] {pos}/{len} - ETA: {eta}"
+            "[i] Gathering file hashes: [{bar:65}] {pos}/{len} - ETA: {eta}"
         )
         .unwrap()
         .progress_chars("=> "),
@@ -251,7 +280,7 @@ fn get_file_hashes(path: &PathBuf, skipdirs: &[String]) -> HashMap<u64, String> 
         .par_iter()
         .progress_with(pb)
         .filter_map(|entry| {
-            if entry.file_type().is_file() && is_media_file(entry.path().to_str().unwrap_or_default()) {
+            if entry.file_type().is_file() && is_media_file(entry.path().to_str().unwrap()) && !ignore.contains(entry.path().to_str().unwrap()) {
                 let file = fs::File::open(entry.path()).ok()?;
                 let mut reader = BufReader::new(file);
                 let mut buffer = [0; 8192];
