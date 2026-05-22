@@ -66,15 +66,15 @@ fn main() {
 
     // list option
     if cli.list {
-        let files = get_files(&source_dir, &cli.skip_dirs);
+        let files = get_files(&abs_source, &cli.skip_dirs);
         println!("[i] Found {} files in {}", files.len(), abs_source.display());
-        get_files(&source_dir, &cli.skip_dirs).iter().for_each(|file| println!("[+] File found: {}", file));
+        get_files(&abs_source, &cli.skip_dirs).iter().for_each(|file| println!("[+] File found: {}", file));
         return;
     }
 
     // quick-mode
     if cli.quick {
-        let source_files = get_files(&source_dir, &cli.skip_dirs);
+        let source_files = get_files(&abs_source, &cli.skip_dirs);
         for file in &source_files {
             println!("[i] Renaming{}{}", if abs_source == abs_dest { " " } else { " and moving " }, file);
             let new_file = rename_file(&file, &abs_dest, &mut renamed_files, !cli.dont_create_subdirs).unwrap();
@@ -84,6 +84,21 @@ fn main() {
         }
         println!("[+] Finished {} {} files in {}", if abs_source == abs_dest { "Renaming" } else { "Moving" }, source_files.len(), abs_source.display());
         return;
+    }
+
+    // base case
+    println!("[i] Gathering file hashes in source folder {}", abs_source.display());
+    let source_files = get_file_hashes(&abs_source, &cli.skip_dirs);
+    println!("[i] Gathering file hashes in destination folder {}", abs_dest.display());
+    let dest_files = get_file_hashes(&abs_dest, &cli.skip_dirs);
+
+    for (hash, filepath) in &source_files {
+        println!("[i] Moving and renaming file {}", filepath);
+        if !dest_files.contains_key(hash) {
+            rename_file(filepath, &abs_dest, &mut renamed_files, !cli.dont_create_subdirs).unwrap();
+            continue;
+        }
+        println!("[i] Duplicate detected for {}. Skipping file", filepath);
     }
         
 }
@@ -145,17 +160,18 @@ fn rename_file(filepath: &str, destination_folder: &PathBuf, renamed_files: &mut
                         renamed_files.insert(new_filename.clone());
                         dest_path.push(new_filename);
                         fs::rename(filepath, &dest_path)?;
+                        println!("[+] Sucessfully renamed to {}", dest_path.display());
                         return Ok(dest_path);
                     }
                     Err(e) => {
-                        eprintln!("[!] An error has occured with file '{}':\n\t{}\n[i] Skipping file {}", filename, e.to_string().red(), filepath);
+                        eprintln!("[!] An error has occured:\n\t{}\n[i] Skipping file {}", e.to_string().red(), filepath);
                         return Ok(PathBuf::new());
                     }
                 }
             }
         }
         Err(e) => {
-            eprintln!("[!] An error has occured with file '{}':\n\t{}\n[i] Skipping file {}", filename, e.to_string().red(), filepath);
+            eprintln!("[!] An error has occured:\n\t{}\n[i] Skipping file {}", e.to_string().red(), filepath);
             return Ok(PathBuf::new());
         }
     }
@@ -163,6 +179,7 @@ fn rename_file(filepath: &str, destination_folder: &PathBuf, renamed_files: &mut
     let mut new_filename = destination_folder.clone();
     new_filename.push(filename);
     fs::rename(filepath, &new_filename)?;
+    println!("[-] Renaming failed. Moved to {}", new_filename.display());
     Ok(new_filename)
 }
 
