@@ -95,7 +95,7 @@ fn main() {
         let source_files = get_files(&abs_source, &cli.skip_dirs);
         for file in &source_files {
             println!("[i] Renaming file '{}'", file);
-            rename_file(file, &abs_source, &mut renamed_files, !cli.dont_create_subdirs).unwrap();
+            rename_file(file, &abs_source, &mut renamed_files, false).unwrap();
         }
         return;
     }
@@ -103,16 +103,19 @@ fn main() {
     // base case
     println!("[i] Gathering file hashes in source folder {}", abs_source.display());
     let source_files = get_file_hashes(&abs_source, &cli.skip_dirs);
+    println!("[i] Found {} files in {}", source_files.len(), abs_source.display());
+
     println!("[i] Gathering file hashes in destination folder {}", abs_dest.display());
     let dest_files = get_file_hashes(&abs_dest, &cli.skip_dirs);
+    println!("[i] Found {} files in {}", dest_files.len(), abs_source.display());
 
     for (hash, filepath) in &source_files {
         println!("[i] Moving and renaming file {}", filepath);
-        if !dest_files.contains_key(hash) {
+        if !dest_files.contains_key(hash) || ( dest_files.contains_key(hash) && filepath == &dest_files[hash] ){
             rename_file(filepath, &abs_dest, &mut renamed_files, !cli.dont_create_subdirs).unwrap();
             continue;
         }
-        println!("[i] Duplicate detected for {}. Skipping file", filepath);
+        println!("[i] Duplicate detected skipping file {}", filepath);
     }
         
 }
@@ -141,7 +144,7 @@ fn get_date_taken(filepath: &str) -> Option<NaiveDateTime> {
             "-MediaCreateDate",
             "-TrackCreateDate",
             "-CreationTime",
-            "-FileModifyDate",  // last resort fallback
+            //"-FileModifyDate",  // last resort fallback
             "-s3",
             "-f",
             filepath,
@@ -178,7 +181,7 @@ fn rename_file(filepath: &str, destination_folder: &PathBuf, renamed_files: &mut
     if let Some(dt) = get_date_taken(filepath) {
         let mut dest_path = destination_folder.clone();
         let base_filename = format!(
-            "{}-{}{:02}{:02}-{:02}{:02}{:02}.{}",
+            "{}_{}{:02}{:02}_{:02}{:02}{:02}.{}",
             if is_video_file(&filename) { "VID" } else { "IMG" },
             dt.year(), dt.month(), dt.day(),
             dt.hour(), dt.minute(), dt.second(),
