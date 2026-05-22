@@ -10,6 +10,7 @@ use chrono::{Datelike, NaiveDateTime, Timelike, DateTime};
 use indicatif::{ParallelProgressIterator, ProgressBar, ProgressStyle};
 use clap::Parser;
 
+
 const IMAGE_EXTENSIONS: [&str; 5] = ["jpg", "jpeg", "png", "gif", "bmp"];
 const VIDEO_EXTENSIONS: [&str; 5] = ["mp4", "avi", "mkv", "mov", "flv"];
 
@@ -74,7 +75,7 @@ fn main() {
     if cli.list { // TODO: add output option
         let files = get_files(&abs_source, &cli.skip_dirs);
         println!("[i] Found {} files in {}", files.len(), abs_source.display());
-        files.iter().for_each(|file| println!("[+] File found: {}", file));
+        files.iter().for_each(|file| println!("[i] File found: {}", file));
         return;
     }
 
@@ -86,7 +87,7 @@ fn main() {
         // customizing the progress bar
         pb.set_style(
             ProgressStyle::with_template(
-                "[i] Processing files: [{bar:65}] {pos}/{len} - ETA: {eta}"
+                "[i] Processing files: [{wide_bar}] {pos}/{len} - ETA: {eta} "
             )
             .unwrap()
             .progress_chars("=> "),
@@ -107,7 +108,7 @@ fn main() {
         // customizing the progress bar
         pb.set_style(
             ProgressStyle::with_template(
-                "[i] Processing files: [{bar}] {pos}/{len} - ETA: {eta}"
+                "[i] Processing files: [{wide_bar}] {pos}/{len} - ETA: {eta} "
             )
             .unwrap()
             .progress_chars("=> "),
@@ -134,7 +135,7 @@ fn main() {
     // customizing the progress bar
     pb.set_style(
         ProgressStyle::with_template(
-            "[i] Moving files: [{bar}] {pos}/{len} - ETA: {eta}"
+            "[i] Processing files: [{wide_bar}] {pos}/{len} - ETA: {eta} "
         )
         .unwrap()
         .progress_chars("=> "),
@@ -270,7 +271,7 @@ fn get_file_hashes(path: &PathBuf, skipdirs: &[String], ignore: HashSet<String>)
     // customizing the progress bar
     pb.set_style(
         ProgressStyle::with_template(
-            "[i] Gathering file hashes: [{bar:65}] {pos}/{len} - ETA: {eta}"
+            "[i] Gathering file hashes: [{wide_bar}] {pos}/{len} - ETA: {eta} "
         )
         .unwrap()
         .progress_chars("=> "),
