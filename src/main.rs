@@ -5,9 +5,8 @@ use std::path::{Path,PathBuf};
 use std::fs;
 use std::io::{BufReader, Read};
 use rayon::prelude::*;
-use rexif::ExifTag;
-use colored::Colorize;
-use chrono::{Datelike, NaiveDateTime, Timelike};
+use std::process::Command;
+use chrono::{Datelike, NaiveDateTime, Timelike, DateTime};
 use indicatif::{ProgressBar, ParallelProgressIterator, ProgressStyle};
 use clap::Parser;
 
@@ -95,9 +94,10 @@ fn main() {
     if cli.rename {
         let source_files = get_files(&abs_source, &cli.skip_dirs);
         for file in &source_files {
-            println!("[i] Renaming file {}", file);
+            println!("[i] Renaming file '{}'", file);
             rename_file(file, &abs_source, &mut renamed_files, !cli.dont_create_subdirs).unwrap();
         }
+        return;
     }
 
     // base case
@@ -133,68 +133,87 @@ fn is_media_file(filename: &str) -> bool {
     is_image_file(filename) || is_video_file(filename)
 }
 
+fn get_date_taken(filepath: &str) -> Option<NaiveDateTime> {
+    let output = Command::new("exiftool")
+        .args([
+            "-DateTimeOriginal",
+            "-CreateDate",
+            "-MediaCreateDate",
+            "-TrackCreateDate",
+            "-CreationTime",
+            "-FileModifyDate",  // last resort fallback
+            "-s3",
+            "-f",
+            filepath,
+        ])
+        .output()
+        .ok()?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    stdout
+        .lines()
+        .map(|l| l.trim())
+        .filter(|l| !l.is_empty() && *l != "-")
+        .find_map(|l| {
+            // "%Y:%m:%d %H:%M:%S" — standard EXIF
+            NaiveDateTime::parse_from_str(l, "%Y:%m:%d %H:%M:%S")
+                // "%Y:%m:%d %H:%M:%S%z" — with timezone offset (e.g. FileModifyDate)
+                .or_else(|_| {
+                    DateTime::parse_from_str(l, "%Y:%m:%d %H:%M:%S%z")
+                        .map(|dt| dt.naive_local())
+                })
+                // "Sat 02 May 2026 16:23:10 CEST" — CreationTime format
+                .or_else(|_| {
+                    DateTime::parse_from_str(l, "%a %d %b %Y %H:%M:%S %Z")
+                        .map(|dt| dt.naive_local())
+                })
+                .ok()
+        })
+}
+
 fn rename_file(filepath: &str, destination_folder: &PathBuf, renamed_files: &mut HashSet<String>, create_subfolders: bool) -> Result<PathBuf, std::io::Error> {
     let filename = filepath.split("/").last().unwrap().to_string();
 
-    match rexif::parse_file(filepath) {
-        Ok(exif_data) => {
-            if let Some(entry) = exif_data.entries.iter().find(|e| e.tag == ExifTag::DateTimeOriginal){
-                let date_taken = entry.value_more_readable.trim();
+    if let Some(dt) = get_date_taken(filepath) {
+        let mut dest_path = destination_folder.clone();
+        let base_filename = format!(
+            "{}-{}{:02}{:02}-{:02}{:02}{:02}.{}",
+            if is_video_file(&filename) { "VID" } else { "IMG" },
+            dt.year(), dt.month(), dt.day(),
+            dt.hour(), dt.minute(), dt.second(),
+            get_file_extension(&filename)
+        );
 
-                match NaiveDateTime::parse_from_str(date_taken, "%Y:%m:%d %H:%M:%S") {
-                    Ok(dt) => {
-                        let mut dest_path = destination_folder.clone();
-                        let base_filename = format!("{}-{}{:02}{:02}-{:02}{:02}{:02}.{}",
-                            if is_video_file(&filename) { "VID" } else {"IMG"},
-                            dt.year(), 
-                            dt.month(),
-                            dt.day(), 
-                            dt.hour(),
-                            dt.minute(),
-                            dt.second(),
-                            get_file_extension(&filename)
-                        );
-
-                        if create_subfolders {
-                            dest_path.push(dt.year().to_string());
-                        }
-                        fs::create_dir_all(&dest_path)?;
-
-                        // Check if a file has the same name
-                        let mut new_filename = base_filename.clone();
-                        let mut counter: u8 = 0;
-
-                        // append a number to the name
-                        while renamed_files.contains(&new_filename) {
-                            counter += counter;
-                            let end = new_filename.char_indices().nth_back(get_file_extension(&new_filename).len()).map(|(i, _)| i).unwrap_or_default();
-                            let prefix = new_filename[..end].to_string();
-                            new_filename = format!("{}_{}.{}", prefix, format!("{:04}", counter), get_file_extension(&filename));
-                        }
-                        renamed_files.insert(new_filename.clone());
-                        dest_path.push(new_filename);
-                        fs::rename(filepath, &dest_path)?;
-                        println!("[+] Sucessfully renamed to {}", dest_path.display());
-                        return Ok(dest_path);
-                    }
-                    Err(e) => {
-                        eprintln!("[!] An error has occured:\n\t{}\n[i] Skipping file {}", e.to_string().red(), filepath);
-                        return Ok(PathBuf::new());
-                    }
-                }
-            }
+        if create_subfolders {
+            dest_path.push(dt.year().to_string());
         }
-        Err(e) => {
-            eprintln!("[!] An error has occured:\n\t{}\n[i] Skipping file {}", e.to_string().red(), filepath);
-            return Ok(PathBuf::new());
+        fs::create_dir_all(&dest_path)?;
+
+        // Deduplicate filename
+        let mut new_filename = base_filename.clone();
+        let mut counter: u32 = 1; // BUG FIX: was u8 and counter += counter (always 0)
+        while renamed_files.contains(&new_filename) {
+            let ext = get_file_extension(&base_filename);
+            let stem_end = base_filename.len() - ext.len() - 1;
+            new_filename = format!("{}_{:04}.{}", &base_filename[..stem_end], counter, ext);
+            counter += 1;
         }
+
+        renamed_files.insert(new_filename.clone());
+        dest_path.push(new_filename);
+        fs::rename(filepath, &dest_path)?;
+        println!("[+] Successfully renamed to {}", dest_path.display());
+        return Ok(dest_path);
     }
-    
-    let mut new_filename = destination_folder.clone();
-    new_filename.push(filename);
-    fs::rename(filepath, &new_filename)?;
-    println!("[-] Renaming failed. Moved to {}", new_filename.display());
-    Ok(new_filename)
+
+    // Fallback: move without renaming
+    eprintln!("[-] No EXIF date found, moving as-is: {}", filepath);
+    let mut fallback = destination_folder.clone();
+    fallback.push(&filename);
+    fs::rename(filepath, &fallback)?;
+    println!("[-] Moved to {}", fallback.display());
+    Ok(fallback)
 }
 
 fn path_contains_any_skip(path: &Path, skips: &[String]) -> bool {
