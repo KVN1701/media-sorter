@@ -144,7 +144,7 @@ fn get_date_taken(filepath: &str) -> Option<NaiveDateTime> {
             "-MediaCreateDate",
             "-TrackCreateDate",
             "-CreationTime",
-            //"-FileModifyDate",  // last resort fallback
+            "-FileModifyDate",  // last resort fallback
             "-s3",
             "-f",
             filepath,
