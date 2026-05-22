@@ -22,14 +22,20 @@ const VIDEO_EXTENSIONS: [&str; 5] = ["mp4", "avi", "mkv", "mov", "flv"];
 struct Cli {
     /// Define the source folder
     source:PathBuf,
-    
+
     #[arg(short, long, conflicts_with = "list")]
     /// Define the destination folder. Defaults to the value of source
     destination: Option<PathBuf>,
+
+    ///
     
     #[arg(short, long, conflicts_with = "destination")]
     /// List the files in the source folder. Does not move or rename files.
     list:bool,
+
+    #[arg(short, long, conflicts_with = "destination", conflicts_with = "list", conflicts_with = "quick")]
+    /// Renames the files in the current directory without moving them.
+    rename:bool,
 
     #[arg(short, long, conflicts_with = "list")]
     /// Greately improves speed, but does not check for duplicates. Does not override!
@@ -84,6 +90,15 @@ fn main() {
         }
         println!("[+] Finished {} {} files in {}", if abs_source == abs_dest { "Renaming" } else { "Moving" }, source_files.len(), abs_source.display());
         return;
+    }
+
+    // rename-mode
+    if cli.rename {
+        let source_files = get_files(&abs_source, &cli.skip_dirs);
+        for file in &source_files {
+            println!("[i] Renaming file {}", file);
+            rename_file(file, &abs_source, &mut renamed_files, !cli.dont_create_subdirs).unwrap();
+        }
     }
 
     // base case
