@@ -1,9 +1,8 @@
 use xxhash_rust::xxh3::Xxh3;
 use walkdir::WalkDir;
 use std::collections::{HashMap, HashSet};
-use std::hash::Hash;
 use std::path::{Path,PathBuf};
-use std::fs::{self, DirEntry};
+use std::fs;
 use std::io::{BufReader, Read};
 use rayon::prelude::*;
 use rexif::ExifTag;
