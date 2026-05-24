@@ -2,8 +2,8 @@ use xxhash_rust::xxh3::Xxh3;
 use walkdir::WalkDir;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path,PathBuf};
-use std::fs;
-use std::io::{BufReader, Read};
+use std::fs::{self,File};
+use std::io::{BufReader, Read, Write};
 use rayon::prelude::*;
 use std::process::Command;
 use chrono::{Datelike, NaiveDateTime, Timelike, DateTime};
@@ -74,6 +74,19 @@ fn main() {
     // list option
     if cli.list { // TODO: add output option
         let files = get_files(&abs_source, &cli.skip_dirs);
+
+        // put the filenames into a file if the output option is set
+        if cli.output.is_some() {
+            let mut output_file = File::create(cli.output.unwrap()).unwrap();
+            let mut contents = String::new();
+            for f in &files {
+                contents.push_str(&format!("{}\n", f));
+                println!("[i] File found: {}", f);
+            }
+            output_file.write_all(contents.as_bytes()).unwrap();
+            return;
+        }
+    
         println!("[i] Found {} files in {}", files.len(), abs_source.display());
         files.iter().for_each(|file| println!("[i] File found: {}", file));
         return;
