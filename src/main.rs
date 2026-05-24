@@ -72,8 +72,9 @@ fn main() {
     };
 
     // list option
-    if cli.list { // TODO: add output option
+    if cli.list {
         let files = get_files(&abs_source, &cli.skip_dirs);
+        println!("[i] Found {} files in {}", files.len(), abs_source.display());
 
         // put the filenames into a file if the output option is set
         if cli.output.is_some() {
@@ -86,8 +87,6 @@ fn main() {
             output_file.write_all(contents.as_bytes()).unwrap();
             return;
         }
-    
-        println!("[i] Found {} files in {}", files.len(), abs_source.display());
         files.iter().for_each(|file| println!("[i] File found: {}", file));
         return;
     }
@@ -105,6 +104,8 @@ fn main() {
             .unwrap()
             .progress_chars("=> "),
         );
+
+        // renaming and moving files
         for file in source_files {
             rename_file(&file, &abs_dest, &mut renamed_files, !cli.dont_create_subdirs).unwrap();
             pb.inc(1);
@@ -164,22 +165,53 @@ fn main() {
     return;        
 }
 
+
+/// Extracts the extension from a filename string.
+/// 
+/// Parameters:
+/// - `filename`: the file name or path segment to inspect.
+/// Returns:
+/// - the file extension as a string.
 fn get_file_extension(filename: &str) -> String {
     filename.split(".").last().unwrap().to_string()
 }
 
+/// Checks whether a filename matches a supported image format.
+/// 
+/// Parameters:
+/// - `filename`: the file name or path to inspect.
+/// Returns:
+/// - `true` when the file is a supported image type.
 fn is_image_file(filename: &str) -> bool {
     IMAGE_EXTENSIONS.iter().any(|ext| filename.to_lowercase().ends_with(ext))
 }
 
+/// Checks whether a filename matches a supported video format.
+/// 
+/// Parameters:
+/// - `filename`: the file name or path to inspect.
+/// Returns:
+/// - `true` when the file is a supported video type.
 fn is_video_file(filename: &str) -> bool {
     VIDEO_EXTENSIONS.iter().any(|ext| filename.to_lowercase().ends_with(ext))
 }
 
+/// Checks whether a filename matches a supported media type.
+/// 
+/// Parameters:
+/// - `filename`: the file name or path to inspect.
+/// Returns:
+/// - `true` when the file is either an image or a video.
 fn is_media_file(filename: &str) -> bool {
     is_image_file(filename) || is_video_file(filename)
 }
 
+/// Reads the original capture/creation date from file metadata.
+/// 
+/// Parameters:
+/// - `filepath`: the media file to inspect.
+/// Returns:
+/// - the parsed timestamp when metadata is available, otherwise `None`.
 fn get_date_taken(filepath: &str) -> Option<NaiveDateTime> {
     let output = Command::new("exiftool")
         .args([
@@ -219,6 +251,13 @@ fn get_date_taken(filepath: &str) -> Option<NaiveDateTime> {
         })
 }
 
+/// Renames or moves a file to the destination folder.
+/// 
+/// Parameters:
+/// - `filepath`: the source file path to process.
+/// - `destination_folder`: the destination directory.
+/// - `renamed_files`: a set used to avoid duplicate output names.
+/// - `create_subfolders`: whether to create a year-based subfolder.
 fn rename_file(filepath: &str, destination_folder: &PathBuf, renamed_files: &mut HashSet<String>, create_subfolders: bool) -> Result<PathBuf, std::io::Error> {
     let filename = filepath.split("/").last().unwrap().to_string();
 
@@ -262,6 +301,13 @@ fn rename_file(filepath: &str, destination_folder: &PathBuf, renamed_files: &mut
     Ok(fallback)
 }
 
+/// Determines whether a path contains any excluded directory name.
+/// 
+/// Parameters:
+/// - `path`: the path to inspect.
+/// - `skips`: the list of directory names to ignore.
+/// Returns:
+/// - `true` if any path component matches one of the skipped names.
 fn path_contains_any_skip(path: &Path, skips: &[String]) -> bool {
     if skips.is_empty() { return false; }
     path.components().any(|c| {
@@ -270,7 +316,14 @@ fn path_contains_any_skip(path: &Path, skips: &[String]) -> bool {
     })
 }
 
-
+/// Scans a directory and builds a hash map of media file hashes.
+/// 
+/// Parameters:
+/// - `path`: the root directory to scan.
+/// - `skipdirs`: directories to exclude from scanning.
+/// - `ignore`: paths that should be skipped during hashing.
+/// Returns:
+/// - a map of file hash to file path.
 fn get_file_hashes(path: &PathBuf, skipdirs: &[String], ignore: HashSet<String>) -> HashMap<u64, String> {
     let files: Vec<_> = WalkDir::new(path)
         .into_iter()
@@ -314,13 +367,20 @@ fn get_file_hashes(path: &PathBuf, skipdirs: &[String], ignore: HashSet<String>)
             }
         }).collect();
 
-    println!("[+] File hashes gathered successfully!");
+    println!("[i] File hashes gathered successfully!");
     result
 }
 
 
+// Collects supported media files under a directory.
+/// 
+/// Parameters:
+/// - `path`: the root directory to scan.
+/// - `skipdirs`: directories to exclude from scanning.
+/// Returns:
+/// - a set of matching media file paths.
 fn get_files(path: &PathBuf, skipdirs: &[String]) -> HashSet<String> {
-    println!("[+] Gathering filenames ...");
+    println!("[i] Gathering filenames ...");
 
     let files: HashSet<String> = WalkDir::new(path)
         .into_iter()
@@ -337,6 +397,6 @@ fn get_files(path: &PathBuf, skipdirs: &[String]) -> HashSet<String> {
         }
     ).collect();
 
-    println!("[+] Files gathered successfully!");
+    println!("[i] Files gathered successfully!");
     files
 }
