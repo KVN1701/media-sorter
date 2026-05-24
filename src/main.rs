@@ -16,7 +16,7 @@ const VIDEO_EXTENSIONS: [&str; 5] = ["mp4", "avi", "mkv", "mov", "flv"];
 
 #[derive(Parser)]
 #[command(name = "media_sorter")]
-#[command(version = "1.0")]
+#[command(version = "1.0.0")]
 #[command(version, about, long_about = None)]
 struct Cli {
     /// Define the source folder
