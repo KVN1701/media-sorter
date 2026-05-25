@@ -12,31 +12,6 @@ A high-performance Rust CLI tool to automatically sort and rename your images an
 
 Perfect for organizing large photo and video collections from cameras, phones, and other sources.
 
-## Features
-
-✨ **Smart Metadata Extraction**
-- Reads EXIF creation dates from images and videos
-- Falls back through multiple date sources: DateTimeOriginal → CreateDate → MediaCreateDate → TrackCreateDate → CreationTime → FileModifyDate
-- Handles various timestamp formats (EXIF standard, timezone offsets, CreationTime)
-
-⚡ **Performance Optimized**
-- Parallel processing with Rayon for fast scanning and hashing
-- XXH3 hashing for efficient duplicate detection
-- Progress bar feedback during processing
-- Quick mode option to skip duplicate detection
-
-📁 **Flexible Organization**
-- Automatically creates year-based subdirectories
-- Option to rename in place without moving
-- Support for custom destination folders
-- Skip specific directories during processing
-- Optional listing mode to preview changes
-
-🔒 **Safe Operations**
-- Non-destructive duplicate detection (won't overwrite existing files)
-- Collision handling with automatic numbering
-- File modification rollback if errors occur
-
 ## Installation
 
 ### Quick Install (Recommended)
@@ -76,11 +51,11 @@ media-sorter --version
 Sort all media in a folder by creation date (default behavior):
 
 ```sh
-media-sorter /path/to/media/folder
+media-sorter /path/to/media/folder -d /path/to/destination/folder
 ```
 
 This will:
-1. Scan all supported media files
+1. Scan all supported media files and collect their hashes
 2. Extract creation dates from metadata
 3. Rename files to `IMG_YYYYMMDD_HHMMSS.ext` or `VID_YYYYMMDD_HHMMSS.ext`
 4. Organize into year subdirectories (2024/, 2023/, etc.)
@@ -97,7 +72,7 @@ ARGUMENTS:
 
 OPTIONS:
     -d, --destination <DESTINATION>
-        Define the destination folder. Defaults to the value of source
+        Define the destination folder. Defaults to the value of source. Required when using hashes.
     
     -l, --list
         List the files in the source folder. Does not move or rename files.
@@ -109,7 +84,7 @@ OPTIONS:
         Renames the files in the current directory without moving them
     
     -q, --quick
-        Greatly improves speed, but does not check for duplicates. Does not override!
+        Greatly improves speed, by sorting without checking hashes for duplicates
     
     --skip-dirs <SKIP_DIRS>
         Skip the specified directories (comma-separated). 
@@ -127,12 +102,12 @@ OPTIONS:
 
 ### Common Examples
 
-**Sort with custom destination:**
+**Sort files into a different directory and detecting duplicates by calculating file hashes:**
 ```sh
-media-sorter /path/to/unsorted --destination /path/to/sorted
+media-sorter /path/to/unsorted --destination /path/to/destination
 ```
 
-**Rename files in place (no moving):**
+**Rename files in place (no moving, no subdirectories):**
 ```sh
 media-sorter /path/to/media --rename
 ```
@@ -154,7 +129,7 @@ media-sorter /path/to/media --quick
 
 **Skip specific folders:**
 ```sh
-media-sorter /path/to/media --skip-dirs "Archive,Backups,Trash"
+media-sorter /path/to/media --skip-dirs "Archive,Backups,Trash" -d /path/to/destination
 ```
 
 **Organize without year subdirectories:**
