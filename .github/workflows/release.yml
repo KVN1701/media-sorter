@@ -22,6 +22,10 @@ jobs:
             binary: media-sorter
 
           - os: macos-latest
+            target: x86_64-apple-darwin
+            binary: media-sorter
+
+          - os: macos-latest
             target: aarch64-apple-darwin
             binary: media-sorter
 
