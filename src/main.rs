@@ -139,6 +139,12 @@ fn main() {
     }
 
     // base case
+    if abs_dest == abs_source {
+        println!("[!] The source and destination folder are equal.");
+        println!("     If you want to sort your images in this folder run media-sorter with the '--quick' option.");
+        return;
+    }
+
     println!("[i] Gathering file hashes in source folder {:?}", abs_source);
     let source_files = get_file_hashes(&abs_source, &cli.skip_dirs, HashSet::new());
 
