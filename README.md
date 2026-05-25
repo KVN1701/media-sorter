@@ -1,5 +1,7 @@
 # media-sorter
 
+![](.img/media-sorter.png)
+
 A high-performance Rust CLI tool to automatically sort and rename your images and videos by their creation date.
 
 ## Overview
