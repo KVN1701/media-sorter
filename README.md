@@ -235,7 +235,3 @@ Use `--quick` mode if you don't need duplicate detection. The default mode is th
 
 ### Handling special cases
 Use `--skip-dirs` to exclude backup or temporary folders from processing.
-
-## Version
-
-Current version: **1.0.1**
