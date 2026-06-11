@@ -3,7 +3,7 @@ use walkdir::WalkDir;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path,PathBuf};
 use std::fs::{self,File};
-use std::io::{BufReader, Read, Write};
+use std::io::{self, BufReader, Read, Write};
 use rayon::prelude::*;
 use std::process::Command;
 use chrono::{Datelike, NaiveDateTime, Timelike, DateTime};
@@ -266,8 +266,14 @@ fn get_date_taken(filepath: &str) -> Option<NaiveDateTime> {
 /// - `destination_folder`: the destination directory.
 /// - `renamed_files`: a set used to avoid duplicate output names.
 /// - `create_subfolders`: whether to create a year-based subfolder.
-fn rename_file(filepath: &str, destination_folder: &PathBuf, renamed_files: &mut HashSet<String>, create_subfolders: bool) -> Result<PathBuf, std::io::Error> {
-    let filename = filepath.split("/").last().unwrap().to_string();
+fn rename_file(filepath: &str, destination_folder: &PathBuf, renamed_files: &mut HashSet<String>, create_subfolders: bool) -> Result<PathBuf, io::Error> {
+    let filename = match filepath.split("/").last() {
+        Some(f) => f.to_string(),
+        None => {
+            eprintln!("[!] filepath is empty. Skipping file {}", &filepath);
+            return Err(io::Error::new(io::ErrorKind::InvalidInput, "empty filepath"));
+        }
+    };
 
     if let Some(dt) = get_date_taken(filepath) {
         let mut dest_path = destination_folder.clone();
@@ -284,9 +290,8 @@ fn rename_file(filepath: &str, destination_folder: &PathBuf, renamed_files: &mut
         }
         fs::create_dir_all(&dest_path)?;
 
-        // Deduplicate filename
         let mut new_filename = base_filename.clone();
-        let mut counter: u32 = 1; // BUG FIX: was u8 and counter += counter (always 0)
+        let mut counter: u32 = 1; 
         while renamed_files.contains(&new_filename) {
             let ext = get_file_extension(&base_filename);
             let stem_end = base_filename.len() - ext.len() - 1;
