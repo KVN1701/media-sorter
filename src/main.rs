@@ -4,7 +4,7 @@ use tool::*;
 use parser::Cli;
 use clap::Parser;
 
-mod file_operations;
+mod sorter;
 mod banner;
 mod tool;
 mod parser;

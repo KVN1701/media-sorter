@@ -4,7 +4,7 @@ use indicatif::{ProgressBar, ProgressStyle};
 use std::fs::File;
 use std::io::Write;
 
-use crate::file_operations::*;
+use crate::sorter::*;
 
 
 pub fn list_files(source: &Path, skip_dirs: &[String], output: Option<String>) {
