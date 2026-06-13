@@ -21,7 +21,7 @@ const VIDEO_EXTENSIONS: [&str; 5] = ["mp4", "avi", "mkv", "mov", "flv"];
 /// - `skipdirs`: directories to exclude from scanning.
 /// Returns:
 /// - a set of matching media file paths.
-pub fn get_files(path: &PathBuf, skipdirs: &[String]) -> HashSet<String> {
+pub fn get_files(path: &Path, skipdirs: &[String]) -> HashSet<String> {
     println!("[i] Gathering filenames ...");
 
     let files: HashSet<String> = WalkDir::new(path)
@@ -51,7 +51,7 @@ pub fn get_files(path: &PathBuf, skipdirs: &[String]) -> HashSet<String> {
 /// - `ignore`: paths that should be skipped during hashing.
 /// Returns:
 /// - a map of file hash to file path.
-pub fn get_file_hashes(path: &PathBuf, skipdirs: &[String], ignore: HashSet<String>) -> HashMap<u64, String> {
+pub fn get_file_hashes(path: &Path, skipdirs: &[String], ignore: HashSet<String>) -> HashMap<u64, String> {
     let files: Vec<_> = WalkDir::new(path)
         .into_iter()
         .filter_map(|e| e.ok())

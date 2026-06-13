@@ -2,14 +2,14 @@ use std::collections::HashSet;
 use std::path::PathBuf;
 use std::fs::File;
 use std::io::Write;
-use rayon::prelude::*;
-
 use clap::Parser;
 
 mod file_operations;
-use file_operations::*;
+mod banner;
+mod tool;
 
-
+use banner::print_banner;
+use tool::*;
 
 
 #[derive(Parser)]
@@ -71,120 +71,7 @@ fn main() {
         Err(_) => std::env::current_dir().unwrap().join(&source_dir),
     };
 
-    // list option
-    if cli.list {
-        let files = get_files(&abs_source, &cli.skip_dirs);
-        println!("[i] Found {} files in {}", files.len(), abs_source.display());
-
-        // put the filenames into a file if the output option is set
-        if cli.output.is_some() {
-            let mut output_file = File::create(cli.output.unwrap()).unwrap();
-            let mut contents = String::new();
-            for f in &files {
-                contents.push_str(&format!("{}\n", f));
-                println!("[i] File found: {}", f);
-            }
-            output_file.write_all(contents.as_bytes()).unwrap();
-            return;
-        }
-        files.iter().for_each(|file| println!("[i] File found: {}", file));
-        return;
-    }
-
-    // quick-mode
-    if cli.quick {
-        let source_files = get_files(&abs_source, &cli.skip_dirs);
-        let pb = ProgressBar::new(source_files.len() as u64);
-
-        // customizing the progress bar
-        pb.set_style(
-            ProgressStyle::with_template(
-                "[i] Processing files: [{wide_bar}] {pos}/{len} - ETA: {eta} "
-            )
-            .unwrap()
-            .progress_chars("=> "),
-        );
-
-        // renaming and moving files
-        for file in source_files {
-            rename_file(&file, &abs_dest, &mut renamed_files, !cli.dont_create_subdirs).unwrap();
-            pb.inc(1);
-        }
-        pb.finish();
-        return;
-    }
-
-    // rename-mode
-    if cli.rename {
-        let source_files = get_files(&abs_source, &cli.skip_dirs);
-        let pb = ProgressBar::new(source_files.len() as u64);
-
-        // customizing the progress bar
-        pb.set_style(
-            ProgressStyle::with_template(
-                "[i] Processing files: [{wide_bar}] {pos}/{len} - ETA: {eta} "
-            )
-            .unwrap()
-            .progress_chars("=> "),
-        );
-
-        for file in &source_files {
-            rename_file(file, &abs_source, &mut renamed_files, false).unwrap();
-            pb.inc(1);
-        }
-        pb.finish();
-        return;
-    }
-
-    // base case
-    if abs_dest == abs_source {
-        println!("[!] The source and destination folder are equal.");
-        println!("     If you want to sort your images in this folder run media-sorter with the '--quick' option.");
-        return;
-    }
-
-    println!("[i] Gathering file hashes in source folder {:?}", abs_source);
-    let source_files = get_file_hashes(&abs_source, &cli.skip_dirs, HashSet::new());
-
-    println!("[i] Gathering file hashes in destination folder {:?}", abs_dest);
-    let dest_files = get_file_hashes(&abs_dest, &cli.skip_dirs, source_files.values().cloned().collect());
-
-    // setting ub the pregress bar
-    let pb = ProgressBar::new(source_files.len() as u64);
-
-    // customizing the progress bar
-    pb.set_style(
-        ProgressStyle::with_template(
-            "[i] Processing files: [{wide_bar}] {pos}/{len} - ETA: {eta} "
-        )
-        .unwrap()
-        .progress_chars("=> "),
-    );
-
-    for (hash, filepath) in &source_files {
-        if !dest_files.contains_key(hash) || ( dest_files.contains_key(hash) && filepath == &dest_files[hash] ){
-            rename_file(filepath, &abs_dest, &mut renamed_files, !cli.dont_create_subdirs).unwrap();
-        }
-        pb.inc(1);
-    }
-    pb.finish();
-    return;        
+          
 }
 
 
-
-
-fn print_banner() {
-    let banner = r#"
-                                $$\ $$\                                                  $$\                         
-                                $$ |\__|                                                 $$ |                        
-    $$$$$$\$$$$\   $$$$$$\   $$$$$$$ |$$\  $$$$$$\           $$$$$$$\  $$$$$$\   $$$$$$\ $$$$$$\    $$$$$$\   $$$$$$\  
-    $$  _$$  _$$\ $$  __$$\ $$  __$$ |$$ | \____$$\ $$$$$$\ $$  _____|$$  __$$\ $$  __$$\\_$$  _|  $$  __$$\ $$  __$$\ 
-    $$ / $$ / $$ |$$$$$$$$ |$$ /  $$ |$$ | $$$$$$$ |\______|\$$$$$$\  $$ /  $$ |$$ |  \__| $$ |    $$$$$$$$ |$$ |  \__|
-    $$ | $$ | $$ |$$   ____|$$ |  $$ |$$ |$$  __$$ |         \____$$\ $$ |  $$ |$$ |       $$ |$$\ $$   ____|$$ |      
-    $$ | $$ | $$ |\$$$$$$$\ \$$$$$$$ |$$ |\$$$$$$$ |        $$$$$$$  |\$$$$$$  |$$ |       \$$$$  |\$$$$$$$\ $$ |      
-    \__| \__| \__| \_______| \_______|\__| \_______|        \_______/  \______/ \__|        \____/  \_______|\__|      
-    "#;
-    println!("{}", banner);
-    println!(" {}\n", "─".repeat(120));
-}
