@@ -1,6 +1,6 @@
 use std::path::Path;
 use std::collections::HashSet;
-use indicatif::{ParallelProgressIterator, ProgressBar, ProgressStyle};
+use indicatif::{ProgressBar, ProgressStyle};
 use std::fs::File;
 use std::io::Write;
 
@@ -100,5 +100,4 @@ pub fn quick_mode(source: &Path, dest: &Path, skip_dirs: &[String], mut renamed_
         pb.inc(1);
     }
     pb.finish();
-    return;
 }
