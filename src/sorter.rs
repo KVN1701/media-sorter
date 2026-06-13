@@ -21,17 +21,16 @@ const VIDEO_EXTENSIONS: [&str; 5] = ["mp4", "avi", "mkv", "mov", "flv"];
 /// - `skipdirs`: directories to exclude from scanning.
 /// Returns:
 /// - a set of matching media file paths.
-pub fn get_files(path: &Path, skipdirs: &[String]) -> HashSet<String> {
+pub fn get_files(path: &Path, skipdirs: &[String]) -> HashSet<PathBuf> {
     println!("[i] Gathering filenames ...");
 
-    let files: HashSet<String> = WalkDir::new(path)
+    let files: HashSet<PathBuf> = WalkDir::new(path)
         .into_iter()
         .filter_map(|e| e.ok())
         .filter(|e| !path_contains_any_skip(e.path(), skipdirs))
         .filter_map(|entry| {
-            let filepath = entry.path().to_str().unwrap_or_default();
             if entry.file_type().is_file() && is_media_file(entry.path().to_str().unwrap_or_default()) {
-                Some(String::from(filepath))
+                Some(entry.into_path())
             }
             else {
                 None
@@ -51,7 +50,7 @@ pub fn get_files(path: &Path, skipdirs: &[String]) -> HashSet<String> {
 /// - `ignore`: paths that should be skipped during hashing.
 /// Returns:
 /// - a map of file hash to file path.
-pub fn get_file_hashes(path: &Path, skipdirs: &[String], ignore: HashSet<String>) -> HashMap<u64, String> {
+pub fn get_file_hashes(path: &Path, skipdirs: &[String], ignore: HashSet<PathBuf>) -> HashMap<u64, PathBuf> {
     let files: Vec<_> = WalkDir::new(path)
         .into_iter()
         .filter_map(|e| e.ok())
@@ -70,11 +69,11 @@ pub fn get_file_hashes(path: &Path, skipdirs: &[String], ignore: HashSet<String>
         .progress_chars("=> "),
     );
 
-    let result : HashMap<u64, String> = files
+    let result : HashMap<u64, PathBuf> = files
         .par_iter()
         .progress_with(pb)
         .filter_map(|entry| {
-            if entry.file_type().is_file() && is_media_file(entry.path().to_str().unwrap()) && !ignore.contains(entry.path().to_str().unwrap()) {
+            if entry.file_type().is_file() && is_media_file(entry.path().to_str().unwrap()) && !ignore.contains(entry.path()) {
                 let file = fs::File::open(entry.path()).ok()?;
                 let mut reader = BufReader::new(file);
                 let mut buffer = [0; 8192];
@@ -87,8 +86,8 @@ pub fn get_file_hashes(path: &Path, skipdirs: &[String], ignore: HashSet<String>
                 }
                 
                 let hash = hasher.digest();
-                let filepath = entry.path().to_str().unwrap().to_string();
-                Some((hash, filepath))
+                //let filepath = entry.path().to_str().unwrap().to_string();
+                Some((hash, entry.path().to_path_buf()))
             } else {
                 None
             }
@@ -105,11 +104,17 @@ pub fn get_file_hashes(path: &Path, skipdirs: &[String], ignore: HashSet<String>
 /// - `destination_folder`: the destination directory.
 /// - `renamed_files`: a set used to avoid duplicate output names.
 /// - `create_subfolders`: whether to create a year-based subfolder.
-pub fn rename_file(filepath: &str, destination_folder: &PathBuf, renamed_files: &mut HashSet<String>, create_subfolders: bool) -> Result<PathBuf, io::Error> {
-    let filename = match filepath.split("/").last() {
-        Some(f) => f.to_string(),
+pub fn rename_file(filepath: &Path, destination_folder: &PathBuf, renamed_files: &mut HashSet<String>, create_subfolders: bool) -> Result<PathBuf, io::Error> {
+    let filename = match filepath.file_name() {
+        Some(f) => match f.to_str() {
+            Some(s) => s,
+            None => {
+                eprintln!("[!] filepath contains invalid UTF-8. Skipping file {}", filepath.display());
+                return Err(io::Error::new(io::ErrorKind::InvalidInput, "invalid UTF-8 in filepath"));
+            }
+        },
         None => {
-            eprintln!("[!] filepath is empty. Skipping file {}", &filepath);
+            eprintln!("[!] filepath is empty. Skipping file {}", filepath.display());
             return Err(io::Error::new(io::ErrorKind::InvalidInput, "empty filepath"));
         }
     };
@@ -145,7 +150,7 @@ pub fn rename_file(filepath: &str, destination_folder: &PathBuf, renamed_files: 
     }
 
     // Fallback: move without renaming
-    eprintln!("[!] No EXIF date found: {}", filepath);
+    eprintln!("[!] No EXIF date found: {}", filepath.display());
     let mut fallback = destination_folder.clone();
     fallback.push(&filename);
     fs::rename(filepath, &fallback)?;
@@ -199,7 +204,9 @@ fn is_media_file(filename: &str) -> bool {
 /// - `filepath`: the media file to inspect.
 /// Returns:
 /// - the parsed timestamp when metadata is available, otherwise `None`.
-fn get_date_taken(filepath: &str) -> Option<NaiveDateTime> {
+fn get_date_taken(filepath: &Path) -> Option<NaiveDateTime> {
+    let path_str = filepath.to_str()?;
+
     let output = Command::new("exiftool")
         .args([
             "-DateTimeOriginal",
@@ -210,7 +217,7 @@ fn get_date_taken(filepath: &str) -> Option<NaiveDateTime> {
             "-FileModifyDate",  // last resort fallback
             "-s3",
             "-f",
-            filepath,
+            path_str,
         ])
         .output()
         .ok()?;

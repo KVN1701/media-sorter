@@ -16,13 +16,13 @@ pub fn list_files(source: &Path, skip_dirs: &[String], output: Option<String>) {
         let mut output_file = File::create(output.unwrap()).unwrap();
         let mut contents = String::new();
         for f in &files {
-            contents.push_str(&format!("{}\n", f));
-            println!("[i] File found: {}", f);
+            contents.push_str(&format!("{}\n", f.display()));
+            println!("[i] File found: {}", f.display());
         }
         output_file.write_all(contents.as_bytes()).unwrap();
         return;
     }
-    files.iter().for_each(|file| println!("[i] File found: {}", file));
+    files.iter().for_each(|file| println!("[i] File found: {}", file.display()));
 }
 
 pub fn move_with_hashing(source: &Path, dest: &Path, skip_dirs: &[String], mut renamed_files: &mut HashSet<String>, dont_create_subdirs: bool) {
@@ -74,7 +74,12 @@ pub fn rename_in_place(source: &Path, skip_dirs: &[String], mut renamed_files: &
     );
 
     for file in &source_files {
-        rename_file(file, &source.to_path_buf(), &mut renamed_files, false).unwrap();
+        let dest_folder = match file.parent() {
+            Some(p) => p.to_path_buf(),
+            None => source.to_path_buf() // if not possible default to moving into the source folder
+        };
+
+        rename_file(file, &dest_folder, &mut renamed_files, false).unwrap();
         pb.inc(1);
     }
     pb.finish();
