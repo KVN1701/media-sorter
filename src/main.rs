@@ -13,9 +13,10 @@ mod parser;
 mod file;
 
 fn main() {
+    // TODO: Improve overall error handling
     print_banner();
 
-    let mut renamed_files: HashSet<MediaFile> = HashSet::new();
+    let mut used_filenames: HashSet<String> = HashSet::new();
 
     // Parser
     let cli = Cli::parse();
@@ -37,14 +38,14 @@ fn main() {
         list_files(&abs_source, &cli.skip_dirs, cli.output);
     }
     else if cli.rename {
-        rename_in_place(&abs_source, &cli.skip_dirs, &mut renamed_files);
+        rename_in_place(&abs_source, &cli.skip_dirs, &mut used_filenames);
     }
     else if cli.quick {
-        quick_mode(&abs_source, &abs_dest, &cli.skip_dirs, &mut renamed_files, cli.dont_create_subdirs);
+        quick_mode(&abs_source, &abs_dest, &cli.skip_dirs, &mut used_filenames, cli.dont_create_subdirs);
     }
     // no option set defaulting to moving with hashing
     else {
-        move_with_hashing(&abs_source, &abs_dest, &cli.skip_dirs, &mut renamed_files, cli.dont_create_subdirs);
+        move_with_hashing(&abs_source, &abs_dest, &cli.skip_dirs, &mut used_filenames, cli.dont_create_subdirs);
     }         
 }
 

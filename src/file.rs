@@ -9,8 +9,6 @@ use anyhow::Ok;
 use chrono::{DateTime, NaiveDateTime, Timelike, Datelike};
 use xxhash_rust::xxh3::Xxh3;
 
-use crate::file;
-
 
 const IMAGE_EXTENSIONS: [&str; 5] = ["jpg", "jpeg", "png", "gif", "bmp"];
 const VIDEO_EXTENSIONS: [&str; 5] = ["mp4", "avi", "mkv", "mov", "flv"];
@@ -49,8 +47,8 @@ impl MediaFile {
         Ok(())
     }
 
-    pub fn new_filename(&self, dest_folder: &Path, renamed_files: &mut HashSet<MediaFile>, rename: bool, create_subfolders:bool) -> Option<PathBuf> {
-        let filename = self.file_loc.file_name()?;
+    pub fn new_filename(&self, dest_folder: &Path, used_filenames: &mut HashSet<String>, rename: bool, create_subfolders:bool) -> Option<PathBuf> {
+        let filename = self.file_name()?;
         let mut dest_path = dest_folder.to_path_buf();
 
         if let Some(dt) = self.get_date_taken() && rename {
@@ -68,14 +66,14 @@ impl MediaFile {
 
             let mut new_filename = base_filename.clone();
             let mut counter: u32 = 1;
-            while renamed_files.contains(&self) {
+            while used_filenames.contains(&new_filename) {
                 let ext = self.file_loc.extension()?.to_str()?;
                 let stem_end = base_filename.len() - ext.len() - 1;
                 new_filename = format!("{}_{:04}.{}", &base_filename[..stem_end], counter, ext);
                 counter += 1;
             }
 
-            renamed_files.insert(self.clone());
+            used_filenames.insert(new_filename.to_string());
             dest_path.push(new_filename);
             Some(dest_path)
         } else if !rename {

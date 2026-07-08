@@ -4,7 +4,6 @@ use std::collections::HashSet;
 use std::path::{Path,PathBuf};
 use std::fs;
 use rayon::prelude::*;
-
 use crate::file::MediaFile;
 
 
@@ -61,8 +60,8 @@ pub fn get_file_hashes(path: &Path, skipdirs: &[String], ignore: HashSet<MediaFi
 }
 
 
-pub fn rename_file(file: &MediaFile, destination_folder: &PathBuf, renamed_files: &mut HashSet<MediaFile>, rename:bool, create_subfolders: bool) -> anyhow::Result<()> {
-    let new_filename = file.new_filename(destination_folder, renamed_files, rename, create_subfolders).unwrap();
+pub fn rename_file(file: &MediaFile, destination_folder: &PathBuf, used_filenames: &mut HashSet<String>, rename:bool, create_subfolders: bool) -> anyhow::Result<()> {
+    let new_filename = file.new_filename(destination_folder, used_filenames, rename, create_subfolders).unwrap();
 
     // create all subdirs needed
     if let Some(parent) = new_filename.parent() {
