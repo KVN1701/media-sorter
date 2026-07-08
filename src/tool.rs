@@ -4,6 +4,7 @@ use indicatif::{ProgressBar, ProgressStyle};
 use std::fs::File;
 use std::io::Write;
 
+use crate::file::MediaFile;
 use crate::sorter::*;
 
 
@@ -16,16 +17,16 @@ pub fn list_files(source: &Path, skip_dirs: &[String], output: Option<String>) {
         let mut output_file = File::create(output.unwrap()).unwrap();
         let mut contents = String::new();
         for f in &files {
-            contents.push_str(&format!("{}\n", f.display()));
-            println!("[i] File found: {}", f.display());
+            contents.push_str(&format!("{}\n", f));
+            println!("[i] File found: {}", f);
         }
         output_file.write_all(contents.as_bytes()).unwrap();
         return;
     }
-    files.iter().for_each(|file| println!("[i] File found: {}", file.display()));
+    files.iter().for_each(|file| println!("[i] File found: {}", file));
 }
 
-pub fn move_with_hashing(source: &Path, dest: &Path, skip_dirs: &[String], mut renamed_files: &mut HashSet<String>, dont_create_subdirs: bool) {
+pub fn move_with_hashing(source: &Path, dest: &Path, skip_dirs: &[String], mut renamed_files: &mut HashSet<MediaFile>, dont_create_subdirs: bool) {
     if source == dest {
         println!("[!] The source and destination folder are equal.");
         println!("    If you want to sort your images in this folder run media-sorter with the '--quick' option.");
@@ -36,7 +37,7 @@ pub fn move_with_hashing(source: &Path, dest: &Path, skip_dirs: &[String], mut r
     let source_files = get_file_hashes(&source, skip_dirs, HashSet::new());
 
     println!("[i] Gathering file hashes in destination folder {:?}", &dest);
-    let dest_files = get_file_hashes(&dest, skip_dirs, source_files.values().cloned().collect());
+    let dest_files = get_file_hashes(&dest, skip_dirs, source_files.clone());
 
     // setting ub the pregress bar
     let pb = ProgressBar::new(source_files.len() as u64);
@@ -50,9 +51,9 @@ pub fn move_with_hashing(source: &Path, dest: &Path, skip_dirs: &[String], mut r
         .progress_chars("=> "),
     );
 
-    for (hash, filepath) in &source_files {
-        if !dest_files.contains_key(hash) || ( dest_files.contains_key(hash) && filepath == &dest_files[hash] ){
-            rename_file(filepath, &dest.to_path_buf(), &mut renamed_files, !dont_create_subdirs).unwrap();
+    for file in &source_files {
+        if !dest_files.contains(file) {
+            rename_file(file, &dest.to_path_buf(), &mut renamed_files, true,!dont_create_subdirs).unwrap();
         }
         pb.inc(1);
     }
@@ -60,7 +61,7 @@ pub fn move_with_hashing(source: &Path, dest: &Path, skip_dirs: &[String], mut r
 }
 
 
-pub fn rename_in_place(source: &Path, skip_dirs: &[String], mut renamed_files: &mut HashSet<String>) {
+pub fn rename_in_place(source: &Path, skip_dirs: &[String], mut renamed_files: &mut HashSet<MediaFile>) {
     let source_files = get_files(&source, &skip_dirs);
     let pb = ProgressBar::new(source_files.len() as u64);
 
@@ -79,14 +80,14 @@ pub fn rename_in_place(source: &Path, skip_dirs: &[String], mut renamed_files: &
             None => source.to_path_buf() // if not possible default to moving into the source folder
         };
 
-        rename_file(file, &dest_folder, &mut renamed_files, false).unwrap();
+        rename_file(file, &dest_folder, &mut renamed_files,true, false).unwrap();
         pb.inc(1);
     }
     pb.finish();
 }
 
 
-pub fn quick_mode(source: &Path, dest: &Path, skip_dirs: &[String], mut renamed_files: &mut HashSet<String>, dont_create_subdirs: bool) {
+pub fn quick_mode(source: &Path, dest: &Path, skip_dirs: &[String], mut renamed_files: &mut HashSet<MediaFile>, dont_create_subdirs: bool) {
     let source_files = get_files(&source, &skip_dirs);
     let pb = ProgressBar::new(source_files.len() as u64);
 
@@ -101,7 +102,7 @@ pub fn quick_mode(source: &Path, dest: &Path, skip_dirs: &[String], mut renamed_
 
     // renaming and moving files
     for file in source_files {
-        rename_file(&file, &dest.to_path_buf(), &mut renamed_files, !dont_create_subdirs).unwrap();
+        rename_file(&file, &dest.to_path_buf(), &mut renamed_files, true, !dont_create_subdirs).unwrap();
         pb.inc(1);
     }
     pb.finish();

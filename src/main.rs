@@ -4,20 +4,23 @@ use tool::*;
 use parser::Cli;
 use clap::Parser;
 
+use crate::file::MediaFile;
+
 mod sorter;
 mod banner;
 mod tool;
 mod parser;
+mod file;
 
 fn main() {
     print_banner();
 
-    let mut renamed_files: HashSet<String> = HashSet::new();
+    let mut renamed_files: HashSet<MediaFile> = HashSet::new();
 
     // Parser
     let cli = Cli::parse();
     let source_dir = cli.source.clone();
-    let destination_dir = cli.destination.clone().unwrap_or(source_dir.clone());
+    let destination_dir = cli.destination.clone().unwrap();
 
     // get the absolute paths
     let abs_source = match source_dir.canonicalize() {
