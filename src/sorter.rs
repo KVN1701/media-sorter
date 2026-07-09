@@ -8,10 +8,15 @@ use rayon::prelude::*;
 use crate::file::MediaFile;
 
 
-pub fn get_files(path: &Path, skipdirs: &[String]) -> HashSet<MediaFile> {
+pub fn get_files(path: &Path, recursive: &bool, skipdirs: &[String]) -> HashSet<MediaFile> {
     println!("[i] Gathering filenames ...");
 
-    let files: HashSet<MediaFile> = WalkDir::new(path)
+    let mut walkdir = WalkDir::new(path);
+    if !recursive {
+        walkdir = walkdir.max_depth(1);
+    }
+
+    let files: HashSet<MediaFile> = walkdir
         .into_iter()
         .filter_map(|e| e.ok())
         .filter(|e| !path_contains_any_skip(e.path(), skipdirs))
@@ -29,8 +34,8 @@ pub fn get_files(path: &Path, skipdirs: &[String]) -> HashSet<MediaFile> {
 }
 
 
-pub fn get_file_hashes(path: &Path, skipdirs: &[String], ignore: HashSet<MediaFile>) -> HashSet<MediaFile> {
-    let files = get_files(path, skipdirs);
+pub fn get_file_hashes(path: &Path, skipdirs: &[String], ignore: &HashSet<MediaFile>, recursive: &bool) -> HashSet<MediaFile> {
+    let files = get_files(path, recursive, skipdirs);
 
     let pb = ProgressBar::new(files.len() as u64);
 
@@ -43,7 +48,7 @@ pub fn get_file_hashes(path: &Path, skipdirs: &[String], ignore: HashSet<MediaFi
         .progress_chars("=> "),
     );
 
-    let result : HashSet<MediaFile> = files
+    let files_with_hashes : Vec<MediaFile> = files
         .par_iter()
         .progress_with(pb)
         .filter_map(|mf| {
@@ -56,12 +61,28 @@ pub fn get_file_hashes(path: &Path, skipdirs: &[String], ignore: HashSet<MediaFi
             }
         }).collect();
 
+    let mut seen: HashSet<u64> = HashSet::new();
+    let mut unique_files: HashSet<MediaFile> = HashSet::new();
+    
+    // delete files found in the same directory if they have the same hash value
+    for mf in files_with_hashes {
+        if let Some(hash) = &mf.hash {
+            if !seen.insert(hash.clone()) {
+                if let Err(e) = fs::remove_file(&mf.file_loc) {
+                    eprintln!("[!] Unable to delete {}:\n    {}", mf, e)
+                }
+                continue;
+            }
+        }
+        unique_files.insert(mf);
+    }
+
     println!("[i] File hashes gathered successfully!");
-    result
+    unique_files
 }
 
 
-pub fn rename_file(file: &MediaFile, destination_folder: &PathBuf, used_filenames: &mut HashSet<String>, rename:bool, create_subfolders: bool) -> anyhow::Result<()> {
+pub fn move_file(file: &MediaFile, destination_folder: &PathBuf, used_filenames: &mut HashSet<String>, rename: bool, create_subfolders: bool) -> anyhow::Result<()> {
     let new_filename = match file.new_filename(destination_folder, used_filenames, rename, create_subfolders) {
         Some(name) => name,
         None => return Err(anyhow!("Failed to gather new filename for {}", file))

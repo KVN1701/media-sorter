@@ -21,13 +21,18 @@ pub struct MediaFile {
 
 impl MediaFile {
     pub fn new(file_location: &Path) -> anyhow::Result<Self> {
-        if !file_location.is_file() {
+        if !file_location.is_file(){
             return Err(anyhow::anyhow!("not a file: {}", file_location.display()));
         };
-        Ok(MediaFile { 
+        let mf = MediaFile {
             file_loc: file_location.into(),
             hash: None
-        })
+        };
+
+        if mf.is_media_file() {
+            return Ok(mf);
+        }
+        Err(anyhow::anyhow!("not a media file: {}", file_location.display()))
     }
 
     pub fn load_hash(&mut self) -> anyhow::Result<()> {
@@ -51,40 +56,42 @@ impl MediaFile {
         let filename = self.file_name()?;
         let mut dest_path = dest_folder.to_path_buf();
 
-        if let Some(dt) = self.get_date_taken() && rename {
-            let base_filename = format!(
-                "{}_{}{:02}{:02}_{:02}{:02}{:02}.{}",
-                if self.is_video_file() { "VID" } else { "IMG" },
-                dt.year(), dt.month(), dt.day(),
-                dt.hour(), dt.minute(), dt.second(),
-                self.file_loc.extension()?.to_str()?
-            );
-
+        if let Some(dt) = self.get_date_taken() {
             if create_subfolders {
                 dest_path.push(dt.year().to_string());
             }
+            
+            if rename {
+                let base_filename = format!(
+                    "{}_{}{:02}{:02}_{:02}{:02}{:02}.{}",
+                    if self.is_video_file() { "VID" } else { "IMG" },
+                    dt.year(), dt.month(), dt.day(),
+                    dt.hour(), dt.minute(), dt.second(),
+                    self.file_loc.extension()?.to_str()?
+                );
 
-            let mut new_filename = base_filename.clone();
-            let mut counter: u32 = 1;
-            while used_filenames.contains(&new_filename) {
-                let ext = self.file_loc.extension()?.to_str()?;
-                let stem_end = base_filename.len() - ext.len() - 1;
-                new_filename = format!("{}_{:04}.{}", &base_filename[..stem_end], counter, ext);
-                counter += 1;
-            }
+                let mut new_filename = base_filename.clone();
+                let mut counter: u32 = 1;
+                while used_filenames.contains(&new_filename) {
+                    let ext = self.file_loc.extension()?.to_str()?;
+                    let stem_end = base_filename.len() - ext.len() - 1;
+                    new_filename = format!("{}_{:04}.{}", &base_filename[..stem_end], counter, ext);
+                    counter += 1;
+                }
 
-            used_filenames.insert(new_filename.to_string());
-            dest_path.push(new_filename);
-            Some(dest_path)
-        } else if !rename {
-            dest_path.push(filename);
-            Some(dest_path)
-        } else {
+                used_filenames.insert(new_filename.to_string());
+                dest_path.push(new_filename);
+            } 
+            else {
+                dest_path.push(filename);
+            }       
+        } 
+        else {
             // Fallback: Leave in source dir 
             eprintln!("[!] No EXIF date found: {}", self);
             dest_path.push(filename);
-            Some(dest_path)
         }
+        Some(dest_path)
     }
 
     pub fn get_date_taken(&self) -> Option<NaiveDateTime> {
@@ -129,19 +136,15 @@ impl MediaFile {
     }
 
     pub fn is_image_file(&self) -> bool {
-        IMAGE_EXTENSIONS.iter().any(|ext| self.file_loc.extension().unwrap() == *ext)
+        IMAGE_EXTENSIONS.iter().any(|ext| self.file_loc.extension().unwrap_or_default() == *ext)
     }
 
     pub fn is_video_file(&self) -> bool {
-        VIDEO_EXTENSIONS.iter().any(|ext| self.file_loc.extension().unwrap() == *ext)
+        VIDEO_EXTENSIONS.iter().any(|ext| self.file_loc.extension().unwrap_or_default() == *ext)
     }
 
     pub fn is_media_file(&self) -> bool {
         self.is_image_file() || self.is_video_file()
-    }
-
-    pub fn parent(&self) -> Option<&Path> {
-        self.file_loc.parent()
     }
 
     pub fn file_name(&self) -> Option<&std::ffi::OsStr>{
@@ -159,11 +162,7 @@ impl Eq for MediaFile {}
 
 impl Hash for MediaFile {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        if self.hash.is_none() {
-            self.file_loc.hash(state);
-        } else {
-            self.hash.hash(state);
-        }
+        self.file_loc.hash(state);
     }
 }
 
