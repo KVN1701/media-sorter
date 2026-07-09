@@ -150,6 +150,10 @@ impl MediaFile {
     pub fn file_name(&self) -> Option<&std::ffi::OsStr>{
         self.file_loc.file_name()
     }
+
+    pub fn parent(&self) -> &Path {
+        self.file_loc.parent().unwrap_or(Path::new("."))
+    }
 }
 
 impl PartialEq for MediaFile {

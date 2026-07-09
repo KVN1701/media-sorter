@@ -58,16 +58,11 @@ fn main() {
         println!("[i] Found {} media files in {}", dest_files.len(), abs_dest.as_ref().unwrap().display());
     }
 
-    let move_dest = match abs_dest {
-        Some(d) => d,
-        None => abs_source
-    };
-
-    handler(source_files, move_dest, cli);     
+    handler(source_files, abs_dest, cli);     
 }
 
 
-fn handler(source_files: HashSet<MediaFile>, move_dest: PathBuf, cli: Cli) {
+fn handler(source_files: HashSet<MediaFile>, move_dest: Option<PathBuf>, cli: Cli) {
     if let Some(out) = cli.output {
         println!("[!] Printing all media files in source to output file {}", out);
         let mut output_file = File::create(out).unwrap();

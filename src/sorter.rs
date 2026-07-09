@@ -82,8 +82,13 @@ pub fn get_file_hashes(path: &Path, skipdirs: &[String], ignore: &HashSet<MediaF
 }
 
 
-pub fn move_file(file: &MediaFile, destination_folder: &PathBuf, used_filenames: &mut HashSet<String>, rename: bool, create_subfolders: bool) -> anyhow::Result<()> {
-    let new_filename = match file.new_filename(destination_folder, used_filenames, rename, create_subfolders) {
+pub fn move_file(file: &MediaFile, destination_folder: &Option<PathBuf>, used_filenames: &mut HashSet<String>, rename: bool, create_subfolders: bool) -> anyhow::Result<()> {
+    let dest = match destination_folder {
+        Some(d) => d,
+        None => file.parent()
+    };
+
+    let new_filename = match file.new_filename(dest, used_filenames, rename, create_subfolders) {
         Some(name) => name,
         None => return Err(anyhow!("Failed to gather new filename for {}", file))
     };
