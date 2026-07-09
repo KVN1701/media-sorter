@@ -73,8 +73,14 @@ ARGUMENTS:
     <SOURCE>    Define the source folder
 
 OPTIONS:
-    -d, --destination <DESTINATION>
-        Define the destination folder. Defaults to the value of source. Required when using hashes.
+    -d, --dest <FOLDER>
+        Define the destination folder. Defaults to the source folder.
+    
+    -r, --recursive
+        Recursively gathers files in the source and destination folders.
+    
+    -D, --remove-duplicates
+        Removes duplicates of files by comparing hashes. Causes a great increase in runtime.
     
     -l, --list
         List the files in the source folder. Does not move or rename files.
@@ -82,18 +88,15 @@ OPTIONS:
     -o, --output <OUTPUT>
         Output a list of files to a file (requires --list)
     
-    -r, --rename
-        Renames the files in the current directory without moving them
-    
-    -q, --quick
-        Greatly improves speed, by sorting without checking hashes for duplicates
+    -n, --rename
+        Renames the files during the operation.
     
     --skip-dirs <SKIP_DIRS>
         Skip the specified directories (comma-separated). 
         Example: --skip-dirs "Backups,Archive,Temp"
     
-    --dont-create-subdirs
-        Do not automatically create subdirectories for every year
+    -s, --sort
+        Create subdirectories for every year (e.g., 2000/, 2001/, ...)
     
     -h, --help
         Print help information
@@ -104,14 +107,14 @@ OPTIONS:
 
 ### Common Examples
 
-**Sort files into a different directory and detecting duplicates by calculating file hashes:**
+**Sort files into a different directory with duplicate detection:**
 ```sh
-media-sorter /path/to/unsorted --destination /path/to/destination
+media-sorter /path/to/unsorted --dest /path/to/destination --remove-duplicates
 ```
 
-**Rename files in place (no moving, no subdirectories):**
+**Rename and organize files with year subdirectories:**
 ```sh
-media-sorter /path/to/media --rename
+media-sorter /path/to/media --rename --sort --dest /path/to/destination
 ```
 
 **List all media files without making changes:**
@@ -124,19 +127,19 @@ media-sorter /path/to/media --list
 media-sorter /path/to/media --list --output media_files.txt
 ```
 
-**Fast mode (skip duplicate detection):**
+**Recursively process nested folders:**
 ```sh
-media-sorter /path/to/media --quick
+media-sorter /path/to/media --recursive --dest /path/to/destination
 ```
 
 **Skip specific folders:**
 ```sh
-media-sorter /path/to/media --skip-dirs "Archive,Backups,Trash" -d /path/to/destination
+media-sorter /path/to/media --skip-dirs "Archive,Backups,Trash" --dest /path/to/destination
 ```
 
-**Organize without year subdirectories:**
+**Organize files without year subdirectories:**
 ```sh
-media-sorter /path/to/media --dont-create-subdirs
+media-sorter /path/to/media --rename --dest /path/to/destination
 ```
 
 ## Supported Formats
@@ -156,24 +159,33 @@ media-sorter /path/to/media --dont-create-subdirs
 
 ## How It Works
 
-### Default Mode (with Duplicate Detection)
+### Default Mode (Fast, Single-Pass Processing)
 
-1. **Gather Hashes**: Scans source folder and computes XXH3 hashes for all media files
+1. **Scan**: Identifies all media files in source folder
+2. **Extract Metadata**: Reads creation dates from EXIF data or file timestamps
+3. **Rename**: Generates standardized filenames with timestamps
+4. **Organize**: Creates year-based subdirectories and moves files
+5. **Deduplicate**: Removes duplicate files found in the source folder
+
+### Duplicate Detection Mode (with `--remove-duplicates`)
+
+1. **Gather Source Hashes**: Computes XXH3 hashes for all media files in source
 2. **Check Destination**: Computes hashes of files already in destination
 3. **Compare**: Identifies which files are new or different
 4. **Process**: Renames and moves only new/different files
-
-### Quick Mode (Fast, No Duplicate Detection)
-
-1. **Scan**: Identifies all media files in source
-2. **Process**: Immediately renames and moves without hash comparison
-3. **Speed**: Significantly faster for large collections
+5. **Speed Impact**: Significantly slower but thorough for large collections
 
 ### List Mode
 
 - Scans and displays all supported media files
 - Optionally saves list to a text file
 - No files are modified
+
+### Recursive Processing (with `--recursive`)
+
+- Scans all subdirectories within the source folder
+- Processes nested media files recursively
+- Organizes all files into a unified destination structure
 
 ## Naming Convention
 
@@ -204,6 +216,7 @@ Files are renamed according to this pattern:
 - **xxhash-rust**: Fast XXH3 hashing for duplicates
 - **indicatif**: Progress bars
 - **colored**: Terminal colors
+- **anyhow**: Error handling
 - **exiftool** (external): EXIF metadata extraction
 
 ### Performance
@@ -211,7 +224,17 @@ Files are renamed according to this pattern:
 - Parallel processing of large file sets
 - Efficient XXH3 hashing (8192-byte buffer chunks)
 - Progress feedback to avoid blocking perception
-- Optional quick mode sacrifices accuracy for speed
+- Optional recursive and duplicate detection modes for advanced use cases
+
+### Code Architecture
+
+The codebase has been refactored into modular components:
+
+- **`file.rs`**: Core `MediaFile` struct and file operations
+- **`sorter.rs`**: File discovery, hashing, and movement logic
+- **`parser.rs`**: CLI argument parsing with flexible modes
+- **`main.rs`**: Application orchestration and mode handling
+- **`banner.rs`**: Welcome message display
 
 ## Contributing
 
@@ -232,8 +255,11 @@ Ensure exiftool is installed and in your PATH. See [Prerequisites](#prerequisite
 ### Files not being renamed
 Some files may lack EXIF metadata. These will be moved without renaming and logged with a warning.
 
-### Slow performance
-Use `--quick` mode if you don't need duplicate detection. The default mode is thorough but slower for large collections.
+### Slow performance with duplicate detection
+The `--remove-duplicates` flag requires hashing all files, which is slower for large collections. Use without this flag for faster processing if you don't need duplicate detection.
 
 ### Handling special cases
 Use `--skip-dirs` to exclude backup or temporary folders from processing.
+
+### Processing nested directories
+Use `--recursive` to scan and process all subdirectories within your source folder.
