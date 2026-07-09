@@ -4,8 +4,6 @@ use tool::*;
 use parser::Cli;
 use clap::Parser;
 
-use crate::file::MediaFile;
-
 mod sorter;
 mod banner;
 mod tool;
@@ -35,17 +33,17 @@ fn main() {
 
     // list, hashing, rename, quick
     if cli.list {
-        list_files(&abs_source, &cli.skip_dirs, cli.output);
+        list_files(&abs_source, &cli.skip_dirs, cli.output).unwrap();
     }
     else if cli.rename {
-        rename_in_place(&abs_source, &cli.skip_dirs, &mut used_filenames);
+        rename_in_place(&abs_source, &cli.skip_dirs, &mut used_filenames).unwrap();
     }
     else if cli.quick {
-        quick_mode(&abs_source, &abs_dest, &cli.skip_dirs, &mut used_filenames, cli.dont_create_subdirs);
+        quick_mode(&abs_source, &abs_dest, &cli.skip_dirs, &mut used_filenames, cli.dont_create_subdirs).unwrap();
     }
     // no option set defaulting to moving with hashing
     else {
-        move_with_hashing(&abs_source, &abs_dest, &cli.skip_dirs, &mut used_filenames, cli.dont_create_subdirs);
+        move_with_hashing(&abs_source, &abs_dest, &cli.skip_dirs, &mut used_filenames, cli.dont_create_subdirs).unwrap();
     }         
 }
 

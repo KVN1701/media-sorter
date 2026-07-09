@@ -3,34 +3,34 @@ use std::collections::HashSet;
 use indicatif::{ProgressBar, ProgressStyle};
 use std::fs::File;
 use std::io::Write;
-
-use crate::file::MediaFile;
 use crate::sorter::*;
+use anyhow::anyhow;
 
 
-pub fn list_files(source: &Path, skip_dirs: &[String], output: Option<String>) {
+pub fn list_files(source: &Path, skip_dirs: &[String], output: Option<String>) -> anyhow::Result<()> {
     let files = get_files(&source, &skip_dirs);
     println!("[i] Found {} files in {}", files.len(), source.display());
 
     // put the filenames into a file if the output option is set
     if output.is_some() {
-        let mut output_file = File::create(output.unwrap()).unwrap();
+        let mut output_file = File::create(output.unwrap())?;
         let mut contents = String::new();
         for f in &files {
             contents.push_str(&format!("{}\n", f));
             println!("[i] File found: {}", f);
         }
-        output_file.write_all(contents.as_bytes()).unwrap();
-        return;
+        output_file.write_all(contents.as_bytes())?;
+        return Ok(());
     }
     files.iter().for_each(|file| println!("[i] File found: {}", file));
+    Ok(())
 }
 
-pub fn move_with_hashing(source: &Path, dest: &Path, skip_dirs: &[String], mut used_filenames: &mut HashSet<String>, dont_create_subdirs: bool) {
+pub fn move_with_hashing(source: &Path, dest: &Path, skip_dirs: &[String], mut used_filenames: &mut HashSet<String>, dont_create_subdirs: bool) -> anyhow::Result<()> {
     if source == dest {
-        println!("[!] The source and destination folder are equal.");
-        println!("    If you want to sort your images in this folder run media-sorter with the '--quick' option.");
-        return;
+        println!("");
+        println!("    ");
+        return Err(anyhow!("[!] The source and destination folder are equal.\n    If you want to sort your images in this folder run media-sorter with the '--quick' option."))
     }
 
     println!("[i] Gathering file hashes in source folder {:?}", source);
@@ -53,15 +53,16 @@ pub fn move_with_hashing(source: &Path, dest: &Path, skip_dirs: &[String], mut u
 
     for file in &source_files {
         if !dest_files.contains(file) {
-            rename_file(file, &dest.to_path_buf(), &mut used_filenames, true,!dont_create_subdirs).unwrap();
+            rename_file(file, &dest.to_path_buf(), &mut used_filenames, true,!dont_create_subdirs)?;
         }
         pb.inc(1);
     }
     pb.finish();
+    Ok(())
 }
 
 
-pub fn rename_in_place(source: &Path, skip_dirs: &[String], mut used_filenames: &mut HashSet<String>) {
+pub fn rename_in_place(source: &Path, skip_dirs: &[String], mut used_filenames: &mut HashSet<String>) -> anyhow::Result<()> {
     let source_files = get_files(&source, &skip_dirs);
     let pb = ProgressBar::new(source_files.len() as u64);
 
@@ -80,14 +81,15 @@ pub fn rename_in_place(source: &Path, skip_dirs: &[String], mut used_filenames: 
             None => source.to_path_buf() // if not possible default to moving into the source folder
         };
 
-        rename_file(file, &dest_folder, &mut used_filenames,true, false).unwrap();
+        rename_file(file, &dest_folder, &mut used_filenames,true, false)?;
         pb.inc(1);
     }
     pb.finish();
+    Ok(())
 }
 
 
-pub fn quick_mode(source: &Path, dest: &Path, skip_dirs: &[String], mut used_filenames: &mut HashSet<String>, dont_create_subdirs: bool) {
+pub fn quick_mode(source: &Path, dest: &Path, skip_dirs: &[String], mut used_filenames: &mut HashSet<String>, dont_create_subdirs: bool) -> anyhow::Result<()> {
     let source_files = get_files(&source, &skip_dirs);
     let pb = ProgressBar::new(source_files.len() as u64);
 
@@ -102,8 +104,9 @@ pub fn quick_mode(source: &Path, dest: &Path, skip_dirs: &[String], mut used_fil
 
     // renaming and moving files
     for file in source_files {
-        rename_file(&file, &dest.to_path_buf(), &mut used_filenames, true, !dont_create_subdirs).unwrap();
+        rename_file(&file, &dest.to_path_buf(), &mut used_filenames, true, !dont_create_subdirs)?;
         pb.inc(1);
     }
     pb.finish();
+    Ok(())
 }

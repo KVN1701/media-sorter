@@ -1,3 +1,4 @@
+use anyhow::anyhow;
 use walkdir::WalkDir;
 use indicatif::{ParallelProgressIterator, ProgressBar, ProgressStyle};
 use std::collections::HashSet;
@@ -48,7 +49,7 @@ pub fn get_file_hashes(path: &Path, skipdirs: &[String], ignore: HashSet<MediaFi
         .filter_map(|mf| {
             if mf.is_media_file() && !ignore.contains(mf) {
                 let mut media_file = mf.clone();
-                media_file.load_hash();
+                media_file.load_hash().ok()?;
                 Some(media_file)
             } else {
                 None
@@ -61,15 +62,20 @@ pub fn get_file_hashes(path: &Path, skipdirs: &[String], ignore: HashSet<MediaFi
 
 
 pub fn rename_file(file: &MediaFile, destination_folder: &PathBuf, used_filenames: &mut HashSet<String>, rename:bool, create_subfolders: bool) -> anyhow::Result<()> {
-    let new_filename = file.new_filename(destination_folder, used_filenames, rename, create_subfolders).unwrap();
+    let new_filename = match file.new_filename(destination_folder, used_filenames, rename, create_subfolders) {
+        Some(name) => name,
+        None => return Err(anyhow!("Failed to gather new filename for {}", file))
+    };
 
     // create all subdirs needed
     if let Some(parent) = new_filename.parent() {
         fs::create_dir_all(parent)?;
     }
     
-    fs::rename(&file.file_loc, &new_filename)?;
-    Ok(())
+    match fs::rename(&file.file_loc, &new_filename) {
+        Ok(_) => Ok(()),
+        Err(e) => Err(anyhow!("[!] Failed moving the file:\n    {}", e))
+    }
 }
 
 fn path_contains_any_skip(path: &Path, skips: &[String]) -> bool {
