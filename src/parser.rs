@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 #[derive(Parser)]
 #[command(name = "media-sorter")]
-#[command(version = "1.1.0")]
+#[command(version = "1.1.1")]
 #[command(version, about, long_about = None)]
 pub struct Cli {
     /// Define the source folder
