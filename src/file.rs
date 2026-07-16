@@ -136,11 +136,11 @@ impl MediaFile {
     }
 
     pub fn is_image_file(&self) -> bool {
-        IMAGE_EXTENSIONS.iter().any(|ext| self.file_loc.extension().unwrap_or_default() == *ext)
+        IMAGE_EXTENSIONS.iter().any(|ext| self.file_loc.extension().unwrap_or_default().eq_ignore_ascii_case(*ext))
     }
 
     pub fn is_video_file(&self) -> bool {
-        VIDEO_EXTENSIONS.iter().any(|ext| self.file_loc.extension().unwrap_or_default() == *ext)
+        VIDEO_EXTENSIONS.iter().any(|ext| self.file_loc.extension().unwrap_or_default().eq_ignore_ascii_case(*ext))
     }
 
     pub fn is_media_file(&self) -> bool {
